@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "build": "bun build --compile --outfile dist/imgen src/index.tsx",
-    "dist": "bun run build && cd dist && tar -czf imgen-darwin-arm64.tar.gz imgen && shasum -a 256 imgen-darwin-arm64.tar.gz"
+    "dist": "bun run build && cd dist && tar -czf imgen-darwin-arm64.tar.gz imgen && shasum -a 256 imgen-darwin-arm64.tar.gz",
+    "probe:paste": "bun run dev/paste-probe.tsx",
+    "probe:protocol": "bun run dev/protocol-probe.tsx"
   },
   "devDependencies": {
     "@types/bun": "latest",

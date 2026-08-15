@@ -9,6 +9,7 @@ import * as React from "react";
 import type { TextareaRenderable } from "@opentui/core";
 
 import { generate, type Run } from "./generate.ts";
+import { copyImageToClipboard, pasteImageFromClipboard } from "./clipboard.ts";
 import { listShots, type Shot } from "./library.ts";
 
 const ACCENT = "#8B5CF6";
@@ -16,6 +17,10 @@ const MUTED = "#9CA3AF";
 const ERROR = "#EF4444";
 const OK = "#10B981";
 const WARN = "#F59E0B";
+
+/** Braille spinner; a Codex turn reports no percentage, so motion is the honest signal. */
+const SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+const TICK_MS = 90;
 
 const shortName = (shot: Shot): string => basename(shot.path).replace(/^exec-/, "").slice(0, 12);
 
@@ -51,7 +56,9 @@ function App() {
   const editor = React.useRef<TextareaRenderable | null>(null);
   const [lastPrompt, setLastPrompt] = React.useState("");
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
-  const [elapsed, setElapsed] = React.useState(0);
+  const [ticks, setTicks] = React.useState(0);
+  const [activity, setActivity] = React.useState("");
+  const [references, setReferences] = React.useState<string[]>([]);
   const [full, setFull] = React.useState(false);
   const [promptGeneration, setPromptGeneration] = React.useState(0);
   const run = React.useRef<Run | null>(null);
@@ -68,14 +75,14 @@ function App() {
    * carrying the preview, so the rest of the image arrives as visible base64 text.
    */
   const { height } = useTerminalDimensions();
-  const listRows = Math.max(3, height - 12);
+  const listRows = Math.max(3, height - (typing ? 16 : 12));
   const windowStart = Math.max(0, Math.min(cursor - Math.floor(listRows / 2), shots.length - listRows));
 
-  // Elapsed counter, so a multi-minute turn never looks like a hang.
+  // One timer drives both the spinner frame and the elapsed seconds, so a multi-minute turn
+  // never looks like a hang.
   React.useEffect(() => {
     if (status.kind !== "generating") return;
-    const started = status.startedAt;
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    const timer = setInterval(() => setTicks((n) => n + 1), TICK_MS);
     return () => clearInterval(timer);
   }, [status]);
 
@@ -83,9 +90,10 @@ function App() {
     if (!description.trim()) return;
     setLastPrompt(description);
     setStatus({ kind: "generating", startedAt: Date.now() });
-    setElapsed(0);
+    setTicks(0);
+    setActivity("");
 
-    const current = generate(description);
+    const current = generate(description, { references, onActivity: setActivity });
     run.current = current;
     current.done
       .then((produced) => {
@@ -104,7 +112,7 @@ function App() {
       .finally(() => {
         run.current = null;
       });
-  }, [renderer]);
+  }, [renderer, references]);
 
   const save = React.useCallback(() => {
     if (!selected) return;
@@ -149,6 +157,28 @@ function App() {
         return setFull((v) => !v);
       case "s":
         return save();
+      case "c":
+        if (selected) {
+          void copyImageToClipboard(selected.path)
+            .then(() => setStatus({ kind: "note", text: "copied to clipboard", tone: "ok" }))
+            .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
+        }
+        return;
+      case "v":
+        void pasteImageFromClipboard()
+          .then((path) => {
+            setReferences((prev) => [...prev, path]);
+            setStatus({
+              kind: "note",
+              text: `reference added (${references.length + 1}) — it goes with the next prompt`,
+              tone: "ok",
+            });
+          })
+          .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
+        return;
+      case "V":
+        setReferences([]);
+        return setStatus({ kind: "note", text: "references cleared", tone: "ok" });
       case "o":
         if (selected) execFile("open", [selected.path], () => {});
         return;
@@ -178,16 +208,21 @@ function App() {
 
       {/* A textarea rather than an input: image prompts are paragraphs, and a single line both
           caps the length and hides everything past the right edge while you are writing it. */}
-      <box flexDirection="row" gap={1} marginTop={1}>
-        <text fg={typing ? ACCENT : MUTED}>prompt</text>
+      {/* Label above rather than beside: sharing a row with a flexGrow textarea put the editor
+          at column zero on top of the label, and pinned it to a single line. */}
+      <box flexDirection="column" marginTop={1}>
+        <text fg={typing ? ACCENT : MUTED}>
+          {typing ? "prompt — enter sends, shift+enter adds a line, esc cancels" : "prompt"}
+        </text>
         <textarea
           key={promptGeneration}
           ref={editor}
-          flexGrow={1}
-          height={typing ? 6 : 1}
+          width="100%"
+          height={typing ? 5 : 1}
+          minHeight={typing ? 5 : 1}
           focused={typing}
           wrapMode="word"
-          placeholder="describe the image — enter sends, shift+enter adds a line"
+          placeholder="describe the image"
         />
       </box>
 
@@ -219,7 +254,15 @@ function App() {
 
       <box flexDirection="column" marginTop={1}>
         {status.kind === "generating" ? (
-          <text fg={ACCENT}>{`generating… ${elapsed}s — esc cancels`}</text>
+          <box flexDirection="column">
+            <text fg={ACCENT}>
+              {`${SPINNER[ticks % SPINNER.length]} generating… ${Math.floor(
+                (Date.now() - status.startedAt) / 1000,
+              )}s — esc cancels`}
+            </text>
+            {/* Codex reports no percentage, so its own last line is the closest thing to one. */}
+            {activity ? <text fg={MUTED}>{activity.slice(0, 110)}</text> : null}
+          </box>
         ) : null}
         {status.kind === "note" ? (
           <text fg={status.tone === "ok" ? OK : ERROR}>{status.text}</text>
@@ -227,7 +270,13 @@ function App() {
         {status.kind === "idle" && selected ? (
           <text fg={MUTED}>{`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`}</text>
         ) : null}
-        <text fg={MUTED}>i prompt · j/k move · f fullscreen · s save here · o open · r reroll · q quit</text>
+        {references.length > 0 ? (
+          <text fg={WARN}>{`${references.length} reference image(s) attached — V clears`}</text>
+        ) : null}
+        <text fg={MUTED}>
+          i prompt · j/k move · f fullscreen · v paste ref · c copy · s save · o open · r reroll · q
+          quit
+        </text>
       </box>
     </box>
   );

@@ -31,19 +31,35 @@ enabled — `codex features list` should show `image_generation stable true`.
 imgen
 ```
 
-| Key         | Action                                       |
-| ----------- | -------------------------------------------- |
-| `i` or `/`  | focus the prompt, `enter` generates          |
-| `j`/`k`     | move through the gallery                     |
-| `f`         | hide the gallery and fill the screen          |
-| `s`         | copy the selected image into the current directory |
-| `o`         | open it in the system viewer                  |
-| `r`         | run the last prompt again                     |
-| `esc`       | cancel a running generation                   |
-| `q`         | quit                                          |
+| Key        | Action                                                     |
+| ---------- | ---------------------------------------------------------- |
+| `i` or `/` | focus the prompt; `enter` sends, `shift+enter` adds a line |
+| `j`/`k`    | move through the gallery                                   |
+| `f`        | hide the gallery and fill the screen                       |
+| `v`        | paste the clipboard image as a reference for the next prompt |
+| `V`        | clear the attached references                              |
+| `c`        | copy the selected image to the clipboard                   |
+| `s`        | save the selected image into the current directory         |
+| `o`        | open it in the system viewer                               |
+| `r`        | run the last prompt again                                  |
+| `esc`      | cancel a running generation                                |
+| `q`        | quit                                                       |
+
+## Reference images
+
+`v` reads the image on the clipboard and attaches it to the next prompt, which reaches Codex
+through `codex exec -i`.
+Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the
+same naming Codex uses for images pasted into one of its own sessions.
+
+Reading and writing pasteboard images goes through `osascript` and the `«class PNGf»` pasteboard
+type, so there is no `pngpaste` or other Homebrew helper to install.
 
 A generation is a full Codex agent turn: it takes minutes and costs tokens, so the run is spawned
-rather than awaited — the elapsed counter keeps ticking and `esc` kills the child.
+rather than awaited — `esc` kills the child at any point.
+While it runs you get a spinner, the elapsed seconds, and the last line Codex printed.
+There is no percentage because the turn does not report one; motion and Codex's own output are the
+honest signals.
 
 ## Terminals
 

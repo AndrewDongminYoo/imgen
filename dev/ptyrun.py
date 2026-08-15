@@ -43,7 +43,7 @@ while time.time() < deadline:
     if keys and not sent and time.time() > deadline - wait / 2:
         for ch in keys:
             os.write(primary, ch.encode())
-            time.sleep(0.4)
+            time.sleep(0.06)
         sent = True
 
 proc.terminate()

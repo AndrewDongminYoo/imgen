@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 
+import { enhanceInstruction } from "./enhance.ts";
 import { buildPrompt } from "./generate.ts";
 import { listShots, newSince, snapshot } from "./library.ts";
 
@@ -99,3 +100,14 @@ test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST || process.platform !== "darwin")(
     expect(pasted).toContain("/.codex/attachments/");
   },
 );
+
+test("enhanceInstruction keeps the draft, forbids lettering, and honours a standing style", () => {
+  const plain = enhanceInstruction("a fox on a bicycle", null);
+  expect(plain).toContain("a fox on a bicycle");
+  expect(plain).toContain("no lettering or text");
+  expect(plain).toContain("prompt.txt");
+  expect(plain).not.toContain("standing style preference");
+
+  const styled = enhanceInstruction("a fox", "flat vector, muted palette");
+  expect(styled).toContain("standing style preference: flat vector, muted palette");
+});

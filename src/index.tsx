@@ -15,6 +15,8 @@ import * as React from "react";
 
 import type { TextareaRenderable } from "@opentui/core";
 
+import { loadConfig } from "./config.ts";
+import { enhance, type EnhanceRun } from "./enhance.ts";
 import { generate, type Run } from "./generate.ts";
 import {
   attachFile,
@@ -73,6 +75,9 @@ function App() {
   const [full, setFull] = React.useState(false);
   const [promptGeneration, setPromptGeneration] = React.useState(0);
   const run = React.useRef<Run | null>(null);
+  const rewrite = React.useRef<EnhanceRun | null>(null);
+  const [enhancing, setEnhancing] = React.useState(false);
+  const config = React.useMemo(loadConfig, []);
 
   const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, true);
   const selected: Shot | undefined = shots[Math.min(cursor, shots.length - 1)];
@@ -93,10 +98,10 @@ function App() {
   // One timer drives both the spinner frame and the elapsed seconds, so a multi-minute turn
   // never looks like a hang.
   React.useEffect(() => {
-    if (status.kind !== "generating") return;
+    if (status.kind !== "generating" && !enhancing) return;
     const timer = setInterval(() => setTicks((n) => n + 1), TICK_MS);
     return () => clearInterval(timer);
-  }, [status]);
+  }, [status, enhancing]);
 
   const start = React.useCallback((description: string) => {
     if (!description.trim()) return;
@@ -168,7 +173,34 @@ function App() {
     if (typing) {
       // Enter is handled here rather than through the element's own submit callback: the JSX
       // `input` intrinsic merges with React's HTML input, so `onSubmit` types as a DOM handler.
-      if (key.name === "escape") setTyping(false);
+      if (key.name === "escape") {
+        rewrite.current?.cancel();
+        rewrite.current = null;
+        setTyping(false);
+      }
+      if (key.name === "tab" && !enhancing) {
+        const draft = editor.current?.editBuffer.getText().trim() ?? "";
+        if (!draft) return;
+        setEnhancing(true);
+        setStatus({ kind: "note", text: "rewriting the prompt\u2026", tone: "ok" });
+        const current = enhance(draft, config.style);
+        rewrite.current = current;
+        current.done
+          .then((text) => {
+            editor.current?.editBuffer.setText(text);
+            setStatus({ kind: "note", text: "rewritten \u2014 edit it, or enter to generate", tone: "ok" });
+          })
+          .catch((error: Error) => {
+            if (error.message !== "cancelled") {
+              setStatus({ kind: "note", text: error.message, tone: "error" });
+            }
+          })
+          .finally(() => {
+            rewrite.current = null;
+            setEnhancing(false);
+          });
+        return;
+      }
       if (key.name === "return" && !key.shift) {
         // The editor is uncontrolled, so its text is read off the buffer and cleared by
         // remounting; mirroring every keystroke into React state would redraw the image too.
@@ -248,7 +280,11 @@ function App() {
           at column zero on top of the label, and pinned it to a single line. */}
       <box flexDirection="column" marginTop={1}>
         <text fg={typing ? ACCENT : MUTED}>
-          {typing ? "prompt — enter sends, shift+enter adds a line, esc cancels" : "prompt"}
+          {typing
+            ? enhancing
+              ? `${SPINNER[ticks % SPINNER.length]} rewriting the prompt — esc cancels`
+              : "prompt — tab rewrites, enter sends, shift+enter adds a line, esc cancels"
+            : "prompt"}
         </text>
         <textarea
           key={promptGeneration}

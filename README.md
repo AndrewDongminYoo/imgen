@@ -34,6 +34,7 @@ imgen
 | Key        | Action                                                     |
 | ---------- | ---------------------------------------------------------- |
 | `i` or `/` | focus the prompt; `enter` sends, `shift+enter` adds a line |
+| `tab`      | rewrite the draft prompt with art direction filled in      |
 | `j`/`k`    | move through the gallery                                   |
 | `f`        | hide the gallery and fill the screen                       |
 | `⌘V`       | attach the image on the clipboard as a reference           |
@@ -45,6 +46,40 @@ imgen
 | `r`        | run the last prompt again                                  |
 | `esc`      | cancel a running generation                                |
 | `q`        | quit                                                       |
+
+## Rewriting a prompt
+
+`tab` in the prompt hands your draft to Codex and asks it to decide what you left open —
+composition and framing, lighting, colour, medium, mood, aspect ratio — while keeping your
+subject exactly as written. It also asks for no lettering, which these models render badly.
+
+The result replaces the draft **in the editor**, not in a generation. Read it, edit it, then
+press enter. A rewrite that quietly became the prompt would be worse than no rewrite.
+
+```log
+a fox on a bicycle
+  ↓ tab
+Flat vector illustration of a fox on a bicycle, shown in a side-on full-body view riding along
+a gently curved park path … muted sage grass, dusty blue sky, warm terracotta path … with no
+lettering, text, logos, or watermarks.
+```
+
+A rewrite is its own Codex turn, so it is not instant — 36s for the example above. `esc` stops
+it.
+
+### Standing style
+
+`~/.config/imgen/config.json`:
+
+```json
+{
+  "style": "flat vector, muted palette, no gradients"
+}
+```
+
+Free text, appended to every rewrite, and `null` by default.
+It is one string rather than a schema of palette and lighting and camera fields because the model
+already reads a sentence as an instruction, and the schema would only be a worse way to write it.
 
 ## Reference images
 

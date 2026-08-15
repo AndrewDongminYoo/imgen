@@ -1,4 +1,4 @@
-# imgen
+# ![imgen](assets/banner.png)
 
 A terminal browser and generator for the images the Codex CLI makes.
 
@@ -89,13 +89,21 @@ honest signals.
 The preview quality is a property of your terminal, not of this tool.
 `imgen` prints which protocol it resolved in the header.
 
-| Protocol | Meaning                                      |
-| -------- | -------------------------------------------- |
-| `kitty`  | true pixels — verified in Warp                |
-| `sixel`  | true pixels                                   |
-| `blocks` | half-block approximation, the universal fallback |
+| Protocol | Meaning                                          | Seen in                    |
+| -------- | ------------------------------------------------ | -------------------------- |
+| `kitty`  | true pixels                                      | Warp                       |
+| `sixel`  | true pixels                                      | —                          |
+| `blocks` | half-block approximation, the universal fallback | VS Code integrated terminal |
 
-Run `bun run dev/protocol-probe.tsx` in any terminal to see what it reports there.
+**A terminal without a pixel protocol is a supported terminal, not a degraded one.**
+`blocks` draws the image with half-block characters and 24-bit colour, which is coarse but
+perfectly enough to tell candidates apart, pick one, and re-roll — the loop this tool exists for.
+Nothing is disabled: the gallery, reference thumbnails, generation and saving all behave the
+same, and the header says `blocks` so you know why the preview looks the way it does.
+
+![imgen running in the VS Code integrated terminal](assets/vscode.png)
+
+Run `bun run probe:protocol` in any terminal to see what it reports there.
 This has to be run in the terminal itself: capability detection is a query the emulator answers,
 so asking from another process's pty always comes back `blocks`.
 

@@ -224,14 +224,11 @@ function App() {
           });
         return;
       }
-      // Four ways to ask for a new line, following opencode's binding
-      // (`shift+return,ctrl+return,alt+return,ctrl+j`). No single one survives every terminal:
-      // shift and ctrl only come through where the kitty keyboard protocol is on, and
-      // alt+return arrives as a bare `return` carrying an escape prefix in its sequence.
-      // Accepting all four means never having to know which one this terminal sends.
-      if (key.name === "linefeed") {
-        return; // ctrl+j — the editor already inserts the line, doing it again gave two
-      }
+      // A new line is any modified return: shift and ctrl arrive as flags where the kitty
+      // keyboard protocol is on, alt+return as a bare `return` carrying an escape prefix in its
+      // sequence. opencode also binds ctrl+j, which is left out here — it needs a second branch
+      // because the two terminal families disagree on whether it is a `linefeed` or a modified
+      // letter, and shift+return and alt+return already cover the same need.
       if (
         key.name === "return" &&
         (key.shift || key.ctrl || key.meta || key.option || key.sequence.startsWith(ESC))
@@ -326,7 +323,7 @@ function App() {
           {typing
             ? enhancing
               ? `${SPINNER[ticks % SPINNER.length]} Codex is fleshing out the draft — esc cancels`
-              : "prompt — enter generates · tab lets Codex flesh out the draft · ctrl+J new line · esc cancels"
+              : "prompt — enter generates · tab lets Codex flesh out the draft · shift/option+enter new line · esc cancels"
             : "prompt"}
         </text>
         <textarea

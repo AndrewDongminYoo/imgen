@@ -35,7 +35,7 @@ imgen
 | ---------- | ---------------------------------------------------------- |
 | `i` or `/` | focus the prompt; `enter` generates                        |
 | `tab`      | let Codex flesh out the draft — composition, light, style  |
-| `ctrl+J`   | new line in the prompt (`shift+enter` where the terminal reports it) |
+| `shift+enter` or `option+enter` | new line in the prompt                 |
 | `j`/`k`    | move through the gallery                                   |
 | `f`        | hide the gallery and fill the screen                       |
 | `⌘V`       | attach the image on the clipboard as a reference           |
@@ -68,12 +68,20 @@ lettering, text, logos, or watermarks.
 A rewrite is its own Codex turn, so it is not instant — 36s for the example above. `esc` stops
 it.
 
-### Why ctrl+J for a new line
+### New lines
 
-`shift+enter` is only distinguishable from `enter` where the terminal speaks the kitty keyboard
-protocol; plain terminals send the same byte for both, and `option+enter` arrives with no
-modifier at all. `ctrl+J` comes through as its own key everywhere, so it is the one that always
-works. `shift+enter` is accepted too, wherever it survives the trip.
+A new line is any modified return — `shift+enter`, `option+enter`, `ctrl+enter`, `cmd+enter`.
+More than one is bound because terminals disagree about which of them reaches an application:
+`shift` and `ctrl` arrive as flags only where the kitty keyboard protocol is on, while
+`option+enter` comes through as a bare return whose byte sequence carries an escape prefix.
+Both routes are verified in Warp.
+
+`ctrl+J` is deliberately **not** bound. Terminals disagree about it more sharply — without the
+kitty protocol it is the raw `0x0A` byte, with it the letter `j` plus a ctrl flag — and the
+modified returns already cover the need.
+
+Run with `IMGEN_KEY_LOG=/tmp/imgen-keys.log` to see what your terminal delivers for any key,
+alongside what the editor did with it.
 
 ### Standing style
 

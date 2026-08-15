@@ -110,8 +110,9 @@ else again with `⌘V`.
 Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the
 same naming Codex uses for images pasted into one of its own sessions.
 
-Reading and writing pasteboard images goes through `osascript` and the `«class PNGf»` pasteboard
-type, so there is no `pngpaste` or other Homebrew helper to install.
+Writing an image *to* the pasteboard (`c`) still goes through `osascript` and the `«class PNGf»`
+type, which the native clipboard does not cover. Either way there is no `pngpaste` or other
+Homebrew helper to install.
 
 A generation is a full Codex agent turn: it takes minutes and costs tokens, so the run is spawned
 rather than awaited — `esc` kills the child at any point.

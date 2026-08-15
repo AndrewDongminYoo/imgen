@@ -37,8 +37,13 @@ function Probe() {
         kind: event.metadata?.kind ?? "(none)",
         mimeType: event.metadata?.mimeType ?? "(none)",
         byteLength: bytes.length,
-        // Printable prefix only — binary would otherwise scribble over the screen.
-        preview: text.slice(0, 90).replace(/[^\x20-\x7E]/g, "·"),
+        // Head and tail, because the interesting part of a pasted path is its extension and a
+        // prefix-only preview made a `.png` path read as `.xcassets`. Binary is dotted out so
+        // it cannot scribble over the screen.
+        preview: (text.length > 80 ? `${text.slice(0, 40)} … ${text.slice(-36)}` : text).replace(
+          /[^\x20-\x7E]/g,
+          "·",
+        ),
         looksLikePath: /\.(png|jpe?g|gif|webp)$/i.test(text.trim()),
         isPngMagic: PNG_MAGIC.every((b, i) => bytes[i] === b),
       },

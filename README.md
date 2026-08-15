@@ -52,11 +52,24 @@ imgen
 `codex exec -i`. Attached references are drawn as thumbnails above the status line, so what is
 going with the prompt is visible rather than counted.
 
-`⌘V` never arrives as a keypress — the terminal turns it into a paste — so three routes are
-handled: terminals that forward binary pastes hand over the image bytes, a pasted path to an
-image file is copied in, and an image-only clipboard (which pastes nothing) is read directly.
-Pasted *text* is left to the prompt editor, so writing a prompt never attaches an image by
-accident. `v` does the last route explicitly if your terminal does something else with `⌘V`.
+`⌘V` never arrives as a keypress — the terminal turns it into a paste — and what it puts in that
+paste varies, so three routes are handled.
+
+| What the terminal sends | Route |
+| ----------------------- | ------ |
+| the image bytes, with an `image/*` mime type | stored directly |
+| the path of an image file, as text | copied in |
+| nothing at all, because the clipboard holds only an image | read from the pasteboard |
+
+Pasted *text* stops at the prompt editor, so writing a prompt while an image happens to be
+copied never attaches it by accident.
+
+Measured in Warp: copying a file in Finder pastes its full path, and copying image data pastes
+an empty string. Warp never sends the bytes — `kind` and `mimeType` come back empty — so the
+first route is there for terminals that do. `v` triggers the pasteboard read explicitly if your
+terminal does something else again with `⌘V`.
+
+`bun run probe:paste` prints what your terminal actually sends.
 Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the
 same naming Codex uses for images pasted into one of its own sessions.
 

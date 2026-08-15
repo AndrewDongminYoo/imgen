@@ -208,15 +208,18 @@ function App() {
             .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
         }
         return;
+      // `name` is always the unshifted key, so a `case "V"` never matches and shift+V fell
+      // through to the paste above — attaching another copy instead of clearing.
       case "v":
+        if (key.shift) {
+          if (references.length === 0) return;
+          setReferences([]);
+          return setStatus({ kind: "note", text: "removed all reference images", tone: "ok" });
+        }
         void pasteImageFromClipboard()
           .then(addReference)
           .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
         return;
-      case "V":
-        if (references.length === 0) return;
-        setReferences([]);
-        return setStatus({ kind: "note", text: "removed all reference images", tone: "ok" });
       case "o":
         if (selected) execFile("open", [selected.path], () => {});
         return;

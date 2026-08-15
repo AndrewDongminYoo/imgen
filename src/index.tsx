@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import { createCliRenderer, resolveImageRenderProtocol } from "@opentui/core";
-import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { execFile } from "node:child_process";
 import { copyFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as React from "react";
+
+import type { TextareaRenderable } from "@opentui/core";
 
 import { generate, type Run } from "./generate.ts";
 import { listShots, type Shot } from "./library.ts";
@@ -17,12 +19,23 @@ const WARN = "#F59E0B";
 
 const shortName = (shot: Shot): string => basename(shot.path).replace(/^exec-/, "").slice(0, 12);
 
+/** At most three characters: a longer stamp pushes the gallery row past its column and wraps. */
 function ago(ms: number): string {
   const minutes = Math.floor((Date.now() - ms) / 60_000);
-  if (minutes < 1) return "just now";
+  if (minutes < 1) return "now";
   if (minutes < 60) return `${minutes}m`;
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
   return `${Math.floor(minutes / 1440)}d`;
+}
+
+const GALLERY_WIDTH = 22;
+
+/** Fixed-width and hard-truncated, because a wrapped row desynchronises every row beneath it. */
+function galleryLabel(shot: Shot, focused: boolean): string {
+  return `${focused ? "\u25B8" : " "} ${shortName(shot)} ${ago(shot.createdAt)}`.slice(
+    0,
+    GALLERY_WIDTH - 2,
+  );
 }
 
 type Status =
@@ -35,15 +48,28 @@ function App() {
   const [shots, setShots] = React.useState<Shot[]>(() => listShots());
   const [cursor, setCursor] = React.useState(0);
   const [typing, setTyping] = React.useState(false);
-  const [prompt, setPrompt] = React.useState("");
+  const editor = React.useRef<TextareaRenderable | null>(null);
   const [lastPrompt, setLastPrompt] = React.useState("");
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
   const [elapsed, setElapsed] = React.useState(0);
   const [full, setFull] = React.useState(false);
+  const [promptGeneration, setPromptGeneration] = React.useState(0);
   const run = React.useRef<Run | null>(null);
 
   const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, true);
   const selected: Shot | undefined = shots[Math.min(cursor, shots.length - 1)];
+
+  /**
+   * The gallery is a window onto the library, not the whole of it.
+   *
+   * Rendering a fixed number of rows while letting the cursor run to the end of a 186-image
+   * library does two bad things at once: the cursor walks off the bottom of what is drawn, and
+   * the overflowing list scrolls the terminal — which cuts the in-flight kitty escape sequence
+   * carrying the preview, so the rest of the image arrives as visible base64 text.
+   */
+  const { height } = useTerminalDimensions();
+  const listRows = Math.max(3, height - 12);
+  const windowStart = Math.max(0, Math.min(cursor - Math.floor(listRows / 2), shots.length - listRows));
 
   // Elapsed counter, so a multi-minute turn never looks like a hang.
   React.useEffect(() => {
@@ -65,6 +91,7 @@ function App() {
       .then((produced) => {
         setShots(listShots());
         setCursor(0);
+        renderer.requestRender();
         setStatus({
           kind: "note",
           text: `${produced.length} image${produced.length === 1 ? "" : "s"} generated`,
@@ -77,7 +104,7 @@ function App() {
       .finally(() => {
         run.current = null;
       });
-  }, []);
+  }, [renderer]);
 
   const save = React.useCallback(() => {
     if (!selected) return;
@@ -95,10 +122,12 @@ function App() {
       // Enter is handled here rather than through the element's own submit callback: the JSX
       // `input` intrinsic merges with React's HTML input, so `onSubmit` types as a DOM handler.
       if (key.name === "escape") setTyping(false);
-      if (key.name === "return") {
+      if (key.name === "return" && !key.shift) {
+        // The editor is uncontrolled, so its text is read off the buffer and cleared by
+        // remounting; mirroring every keystroke into React state would redraw the image too.
+        const description = editor.current?.editBuffer.getText() ?? "";
         setTyping(false);
-        const description = prompt;
-        setPrompt("");
+        setPromptGeneration((n) => n + 1);
         start(description);
       }
       return; // the focused input owns every other key
@@ -147,25 +176,32 @@ function App() {
         ) : null}
       </box>
 
+      {/* A textarea rather than an input: image prompts are paragraphs, and a single line both
+          caps the length and hides everything past the right edge while you are writing it. */}
       <box flexDirection="row" gap={1} marginTop={1}>
         <text fg={typing ? ACCENT : MUTED}>prompt</text>
-        <input
+        <textarea
+          key={promptGeneration}
+          ref={editor}
           flexGrow={1}
+          height={typing ? 6 : 1}
           focused={typing}
-          value={prompt}
-          placeholder="describe the image, then press enter"
-          onInput={setPrompt}
+          wrapMode="word"
+          placeholder="describe the image — enter sends, shift+enter adds a line"
         />
       </box>
 
       <box flexDirection="row" flexGrow={1} marginTop={1} gap={1}>
         {full ? null : (
-          <box flexDirection="column" width={22}>
-            {shots.slice(0, 24).map((shot, index) => (
-              <text key={shot.path} fg={index === cursor ? ACCENT : MUTED}>
-                {`${index === cursor ? "▸" : " "} ${shortName(shot)} ${ago(shot.createdAt)}`}
-              </text>
-            ))}
+          <box flexDirection="column" width={GALLERY_WIDTH} height={listRows} overflow="hidden">
+            {shots.slice(windowStart, windowStart + listRows).map((shot, offset) => {
+              const index = windowStart + offset;
+              return (
+                <text key={shot.path} fg={index === cursor ? ACCENT : MUTED}>
+                  {galleryLabel(shot, index === cursor)}
+                </text>
+              );
+            })}
             {shots.length === 0 ? <text fg={MUTED}>nothing generated yet</text> : null}
           </box>
         )}

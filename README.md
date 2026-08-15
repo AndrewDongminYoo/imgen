@@ -33,8 +33,9 @@ imgen
 
 | Key        | Action                                                     |
 | ---------- | ---------------------------------------------------------- |
-| `i` or `/` | focus the prompt; `enter` sends, `shift+enter` adds a line |
-| `tab`      | rewrite the draft prompt with art direction filled in      |
+| `i` or `/` | focus the prompt; `enter` generates                        |
+| `tab`      | let Codex flesh out the draft — composition, light, style  |
+| `ctrl+J`   | new line in the prompt (`shift+enter` where the terminal reports it) |
 | `j`/`k`    | move through the gallery                                   |
 | `f`        | hide the gallery and fill the screen                       |
 | `⌘V`       | attach the image on the clipboard as a reference           |
@@ -47,7 +48,7 @@ imgen
 | `esc`      | cancel a running generation                                |
 | `q`        | quit                                                       |
 
-## Rewriting a prompt
+## Fleshing out a prompt
 
 `tab` in the prompt hands your draft to Codex and asks it to decide what you left open —
 composition and framing, lighting, colour, medium, mood, aspect ratio — while keeping your
@@ -66,6 +67,13 @@ lettering, text, logos, or watermarks.
 
 A rewrite is its own Codex turn, so it is not instant — 36s for the example above. `esc` stops
 it.
+
+### Why ctrl+J for a new line
+
+`shift+enter` is only distinguishable from `enter` where the terminal speaks the kitty keyboard
+protocol; plain terminals send the same byte for both, and `option+enter` arrives with no
+modifier at all. `ctrl+J` comes through as its own key everywhere, so it is the one that always
+works. `shift+enter` is accepted too, wherever it survives the trip.
 
 ### Standing style
 

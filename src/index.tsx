@@ -182,13 +182,13 @@ function App() {
         const draft = editor.current?.editBuffer.getText().trim() ?? "";
         if (!draft) return;
         setEnhancing(true);
-        setStatus({ kind: "note", text: "rewriting the prompt\u2026", tone: "ok" });
+        setStatus({ kind: "note", text: "asking Codex to flesh out the draft\u2026", tone: "ok" });
         const current = enhance(draft, config.style);
         rewrite.current = current;
         current.done
           .then((text) => {
             editor.current?.editBuffer.setText(text);
-            setStatus({ kind: "note", text: "rewritten \u2014 edit it, or enter to generate", tone: "ok" });
+            setStatus({ kind: "note", text: "draft filled in \u2014 read it, edit it, then enter to generate", tone: "ok" });
           })
           .catch((error: Error) => {
             if (error.message !== "cancelled") {
@@ -201,7 +201,15 @@ function App() {
           });
         return;
       }
-      if (key.name === "return" && !key.shift) {
+      // Newlines are inserted here rather than left to the editor, because which key even
+      // reaches it depends on the terminal: shift+enter is only distinguishable from enter
+      // where the kitty keyboard protocol is on (option+enter arrives with no modifier at all),
+      // while ctrl+J comes through as its own `linefeed` name everywhere.
+      if (key.name === "linefeed" || (key.name === "return" && key.shift)) {
+        editor.current?.editBuffer.newLine();
+        return;
+      }
+      if (key.name === "return") {
         // The editor is uncontrolled, so its text is read off the buffer and cleared by
         // remounting; mirroring every keystroke into React state would redraw the image too.
         const description = editor.current?.editBuffer.getText() ?? "";
@@ -214,6 +222,11 @@ function App() {
 
     switch (key.name) {
       case "q":
+        // Exiting straight from here would skip OpenTUI's teardown, and the terminal keeps
+        // whatever the renderer turned on: mouse reporting (1000/1002/1003/1006) keeps writing
+        // coordinates into the next shell prompt, the alternate screen never flips back, and
+        // the cursor stays hidden.
+        renderer.destroy();
         return process.exit(0);
       case "i":
       case "/":
@@ -282,8 +295,8 @@ function App() {
         <text fg={typing ? ACCENT : MUTED}>
           {typing
             ? enhancing
-              ? `${SPINNER[ticks % SPINNER.length]} rewriting the prompt — esc cancels`
-              : "prompt — tab rewrites, enter sends, shift+enter adds a line, esc cancels"
+              ? `${SPINNER[ticks % SPINNER.length]} Codex is fleshing out the draft — esc cancels`
+              : "prompt — enter generates · tab lets Codex flesh out the draft · ctrl+J new line · esc cancels"
             : "prompt"}
         </text>
         <textarea
@@ -294,7 +307,7 @@ function App() {
           minHeight={typing ? 5 : 1}
           focused={typing}
           wrapMode="word"
-          placeholder="describe the image"
+          placeholder="describe the image — rough is fine, tab fills in the rest"
         />
       </box>
 

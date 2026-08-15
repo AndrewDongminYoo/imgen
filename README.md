@@ -74,7 +74,10 @@ A new line is any modified return — `shift+enter`, `option+enter`, `ctrl+enter
 More than one is bound because terminals disagree about which of them reaches an application:
 `shift` and `ctrl` arrive as flags only where the kitty keyboard protocol is on, while
 `option+enter` comes through as a bare return whose byte sequence carries an escape prefix.
-Both routes are verified in Warp.
+Both routes are verified in Warp, which speaks the kitty protocol — `shift+enter` arrives as
+`ESC[13;2u` with the flag set, `option+enter` as `ESC[13;3u`. The same keys reach a terminal
+without it as a bare return with an escape prefix and no flags at all, which is why both shapes
+are accepted rather than one.
 
 `ctrl+J` is deliberately **not** bound. Terminals disagree about it more sharply — without the
 kitty protocol it is the raw `0x0A` byte, with it the letter `j` plus a ctrl flag — and the

@@ -8,8 +8,7 @@ import {
   useTerminalDimensions,
 } from "@opentui/react";
 import { execFile } from "node:child_process";
-import { copyFileSync } from "node:fs";
-import { existsSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as React from "react";
 
@@ -34,6 +33,18 @@ const WARN = "#F59E0B";
 /** Braille spinner; a Codex turn reports no percentage, so motion is the honest signal. */
 const SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 const TICK_MS = 90;
+
+/** alt+return arrives as a bare `return` whose sequence is prefixed with this. */
+const ESC = "\u001b";
+
+/**
+ * Set IMGEN_KEY_LOG to a path to record what this terminal actually delivers, in the real app.
+ *
+ * Which key reaches an application, and what the editor then does with it, varies by terminal
+ * and cannot be learned from a pty — every attempt to settle it that way here was wrong. This
+ * is how to answer it from the terminal you actually use.
+ */
+const KEY_LOG = process.env.IMGEN_KEY_LOG;
 
 const shortName = (shot: Shot): string => basename(shot.path).replace(/^exec-/, "").slice(0, 12);
 
@@ -170,6 +181,18 @@ function App() {
   }, [selected]);
 
   useKeyboard((key) => {
+    if (KEY_LOG) {
+      const seen = key;
+      setTimeout(() => {
+        appendFileSync(
+          KEY_LOG,
+          `name=${seen.name} shift=${seen.shift} ctrl=${seen.ctrl} option=${seen.option} ` +
+            `seq=${JSON.stringify(seen.sequence)} buffer=${JSON.stringify(
+              editor.current?.editBuffer.getText() ?? null,
+            )}\n`,
+        );
+      }, 40);
+    }
     if (typing) {
       // Enter is handled here rather than through the element's own submit callback: the JSX
       // `input` intrinsic merges with React's HTML input, so `onSubmit` types as a DOM handler.
@@ -201,15 +224,21 @@ function App() {
           });
         return;
       }
-      // The editor inserts a line itself for ctrl+J, so `linefeed` is simply left alone —
-      // inserting one here as well produced two. It does nothing for shift+enter, which only
-      // arrives as a distinct key where the kitty keyboard protocol is on, so that one is
-      // inserted by hand.
-      if (key.name === "return" && key.shift) {
+      // Four ways to ask for a new line, following opencode's binding
+      // (`shift+return,ctrl+return,alt+return,ctrl+j`). No single one survives every terminal:
+      // shift and ctrl only come through where the kitty keyboard protocol is on, and
+      // alt+return arrives as a bare `return` carrying an escape prefix in its sequence.
+      // Accepting all four means never having to know which one this terminal sends.
+      if (key.name === "linefeed") {
+        return; // ctrl+j — the editor already inserts the line, doing it again gave two
+      }
+      if (
+        key.name === "return" &&
+        (key.shift || key.ctrl || key.meta || key.option || key.sequence.startsWith(ESC))
+      ) {
         editor.current?.editBuffer.newLine();
         return;
       }
-      if (key.name === "linefeed") return;
       if (key.name === "return") {
         // The editor is uncontrolled, so its text is read off the buffer and cleared by
         // remounting; mirroring every keystroke into React state would redraw the image too.

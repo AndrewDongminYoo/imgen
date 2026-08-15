@@ -39,6 +39,7 @@ function App() {
   const [lastPrompt, setLastPrompt] = React.useState("");
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
   const [elapsed, setElapsed] = React.useState(0);
+  const [full, setFull] = React.useState(false);
   const run = React.useRef<Run | null>(null);
 
   const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, true);
@@ -115,6 +116,8 @@ function App() {
       case "k":
       case "up":
         return setCursor((c) => Math.max(c - 1, 0));
+      case "f":
+        return setFull((v) => !v);
       case "s":
         return save();
       case "o":
@@ -156,17 +159,25 @@ function App() {
       </box>
 
       <box flexDirection="row" flexGrow={1} marginTop={1} gap={1}>
-        <box flexDirection="column" width={22}>
-          {shots.slice(0, 24).map((shot, index) => (
-            <text key={shot.path} fg={index === cursor ? ACCENT : MUTED}>
-              {`${index === cursor ? "▸" : " "} ${shortName(shot)} ${ago(shot.createdAt)}`}
-            </text>
-          ))}
-          {shots.length === 0 ? <text fg={MUTED}>nothing generated yet</text> : null}
-        </box>
+        {full ? null : (
+          <box flexDirection="column" width={22}>
+            {shots.slice(0, 24).map((shot, index) => (
+              <text key={shot.path} fg={index === cursor ? ACCENT : MUTED}>
+                {`${index === cursor ? "▸" : " "} ${shortName(shot)} ${ago(shot.createdAt)}`}
+              </text>
+            ))}
+            {shots.length === 0 ? <text fg={MUTED}>nothing generated yet</text> : null}
+          </box>
+        )}
 
+        {/* The image has no intrinsic size, so without flexGrow it collapses to a thumbnail in
+            the corner of a full-size box. `fit` then scales within whatever it was given. */}
         <box flexGrow={1} border borderColor={MUTED}>
-          {selected ? <image source={selected.path} fit="fit" /> : <text fg={MUTED}>no image</text>}
+          {selected ? (
+            <image flexGrow={1} width="100%" source={selected.path} fit="fit" />
+          ) : (
+            <text fg={MUTED}>no image</text>
+          )}
         </box>
       </box>
 
@@ -180,7 +191,7 @@ function App() {
         {status.kind === "idle" && selected ? (
           <text fg={MUTED}>{`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`}</text>
         ) : null}
-        <text fg={MUTED}>i prompt · j/k move · s save here · o open · r reroll · q quit</text>
+        <text fg={MUTED}>i prompt · j/k move · f fullscreen · s save here · o open · r reroll · q quit</text>
       </box>
     </box>
   );

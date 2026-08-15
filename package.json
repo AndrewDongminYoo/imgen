@@ -6,7 +6,9 @@
     "start": "bun run src/index.tsx",
     "dev": "bun run --watch src/index.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "build": "bun build --compile --outfile dist/imgen src/index.tsx",
+    "dist": "bun run build && cd dist && tar -czf imgen-darwin-arm64.tar.gz imgen && shasum -a 256 imgen-darwin-arm64.tar.gz"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -23,5 +25,11 @@
   "version": "0.1.0",
   "bin": {
     "imgen": "./src/index.tsx"
+  },
+  "license": "MIT",
+  "description": "A terminal browser and generator for the images the Codex CLI makes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndrewDongminYoo/imgen.git"
   }
 }

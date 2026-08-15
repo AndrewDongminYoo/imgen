@@ -22,7 +22,7 @@
     "@opentui/react": "^0.5.3",
     "react": "^19.2.6"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "bin": {
     "imgen": "./src/index.tsx"
   },

@@ -57,17 +57,19 @@ paste varies, so three routes are handled.
 
 | What the terminal sends | Route |
 | ----------------------- | ------ |
-| the image bytes, with an `image/*` mime type | stored directly |
 | the path of an image file, as text | copied in |
-| nothing at all, because the clipboard holds only an image | read from the pasteboard |
+| anything else | the pasteboard is read directly, by mime type |
 
 Pasted *text* stops at the prompt editor, so writing a prompt while an image happens to be
 copied never attaches it by accident.
 
+The pasteboard read is OpenTUI's native clipboard, asked for `image/png`, `image/tiff` or
+`image/jpeg` — so it does not depend on the terminal forwarding anything, and it is not
+macOS-only. `osascript` remains as a fallback for the documented `unsupported` status.
+
 Measured in Warp: copying a file in Finder pastes its full path, and copying image data pastes
-an empty string. Warp never sends the bytes — `kind` and `mimeType` come back empty — so the
-first route is there for terminals that do. `v` triggers the pasteboard read explicitly if your
-terminal does something else again with `⌘V`.
+an empty string. `v` triggers the pasteboard read explicitly if your terminal does something
+else again with `⌘V`.
 
 `bun run probe:paste` prints what your terminal actually sends.
 Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the

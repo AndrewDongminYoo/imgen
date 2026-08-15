@@ -1,3 +1,4 @@
+import { createHostClipboard, type HostClipboardService } from "@opentui/core";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -56,8 +57,36 @@ export function attachFile(source: string): string {
   return dest;
 }
 
-/** Writes the clipboard image into this session's attachment directory and returns its path. */
+/** Created once — the backend owns a native service, so a per-call instance would be wasteful. */
+let host: HostClipboardService | null = null;
+
+function hostClipboard(): HostClipboardService {
+  host ??= createHostClipboard({ maxReadBytes: 64 * 1024 * 1024 });
+  return host;
+}
+
+/**
+ * Writes the clipboard image into this session's attachment directory and returns its path.
+ *
+ * OpenTUI reads the pasteboard natively and by mime type, which beats shelling out: no temp
+ * file, no macOS-only `osascript`, and the format comes back named. The osascript path stays
+ * as a fallback for the documented `unsupported` status.
+ */
 export async function pasteImageFromClipboard(): Promise<string> {
+  const result = await hostClipboard().read({
+    preferredTypes: ["image/png", "image/tiff", "image/jpeg"],
+  });
+
+  if (result.status === "read" && result.representation.mimeType.startsWith("image/")) {
+    return attachBytes(result.representation.bytes);
+  }
+  if (result.status === "empty") throw new Error("no image on the clipboard");
+  if (result.status === "failed") throw result.error;
+
+  return pasteImageViaOsascript();
+}
+
+async function pasteImageViaOsascript(): Promise<string> {
   const dest = nextImagePath(attachmentDir());
   await run("osascript", [
     "-e",

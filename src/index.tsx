@@ -17,7 +17,6 @@ import type { TextareaRenderable } from "@opentui/core";
 
 import { generate, type Run } from "./generate.ts";
 import {
-  attachBytes,
   attachFile,
   copyImageToClipboard,
   pasteImageFromClipboard,
@@ -133,15 +132,11 @@ function App() {
   }, []);
 
   /**
-   * Cmd+V never reaches an application as a key — the terminal turns it into a paste. Terminals
-   * that implement binary paste hand over the image bytes directly; the rest send text, or
-   * nothing at all, so both of those fall back to reading the pasteboard ourselves.
+   * Cmd+V never reaches an application as a key — the terminal turns it into a paste, and what
+   * it puts in that paste varies. A pasted file path is copied in; anything else defers to
+   * reading the pasteboard directly, which gets the image whatever the terminal did with it.
    */
   usePaste((event) => {
-    if (event.metadata?.mimeType?.startsWith("image/")) {
-      return addReference(attachBytes(event.bytes));
-    }
-
     const text = new TextDecoder().decode(event.bytes).trim();
     if (/\.(png|jpe?g|gif|webp)$/i.test(text) && existsSync(text)) {
       return addReference(attachFile(text));

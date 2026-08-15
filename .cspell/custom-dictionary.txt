@@ -1,0 +1,6 @@
+# Custom Dictionary Words
+bunx
+imgen
+osascript
+ptyrun
+sixel

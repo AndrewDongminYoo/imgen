@@ -201,14 +201,15 @@ function App() {
           });
         return;
       }
-      // Newlines are inserted here rather than left to the editor, because which key even
-      // reaches it depends on the terminal: shift+enter is only distinguishable from enter
-      // where the kitty keyboard protocol is on (option+enter arrives with no modifier at all),
-      // while ctrl+J comes through as its own `linefeed` name everywhere.
-      if (key.name === "linefeed" || (key.name === "return" && key.shift)) {
+      // The editor inserts a line itself for ctrl+J, so `linefeed` is simply left alone —
+      // inserting one here as well produced two. It does nothing for shift+enter, which only
+      // arrives as a distinct key where the kitty keyboard protocol is on, so that one is
+      // inserted by hand.
+      if (key.name === "return" && key.shift) {
         editor.current?.editBuffer.newLine();
         return;
       }
+      if (key.name === "linefeed") return;
       if (key.name === "return") {
         // The editor is uncontrolled, so its text is read off the buffer and cleared by
         // remounting; mirroring every keystroke into React state would redraw the image too.

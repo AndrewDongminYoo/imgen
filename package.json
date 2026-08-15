@@ -10,7 +10,8 @@
     "build": "bun build --compile --outfile dist/imgen src/index.tsx",
     "dist": "bun run build && cd dist && tar -czf imgen-darwin-arm64.tar.gz imgen && shasum -a 256 imgen-darwin-arm64.tar.gz",
     "probe:paste": "bun run dev/paste-probe.tsx",
-    "probe:protocol": "bun run dev/protocol-probe.tsx"
+    "probe:protocol": "bun run dev/protocol-probe.tsx",
+    "probe:key": "bun run dev/key-probe.tsx"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -24,7 +25,7 @@
     "@opentui/react": "^0.5.3",
     "react": "^19.2.6"
   },
-  "version": "0.2.1",
+  "version": "0.2.2",
   "bin": {
     "imgen": "./src/index.tsx"
   },

@@ -1,15 +1,27 @@
 #!/usr/bin/env bun
 import { createCliRenderer, resolveImageRenderProtocol } from "@opentui/core";
-import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
+import {
+  createRoot,
+  useKeyboard,
+  usePaste,
+  useRenderer,
+  useTerminalDimensions,
+} from "@opentui/react";
 import { execFile } from "node:child_process";
 import { copyFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as React from "react";
 
 import type { TextareaRenderable } from "@opentui/core";
 
 import { generate, type Run } from "./generate.ts";
-import { copyImageToClipboard, pasteImageFromClipboard } from "./clipboard.ts";
+import {
+  attachBytes,
+  attachFile,
+  copyImageToClipboard,
+  pasteImageFromClipboard,
+} from "./clipboard.ts";
 import { listShots, type Shot } from "./library.ts";
 
 const ACCENT = "#8B5CF6";
@@ -75,7 +87,8 @@ function App() {
    * carrying the preview, so the rest of the image arrives as visible base64 text.
    */
   const { height } = useTerminalDimensions();
-  const listRows = Math.max(3, height - (typing ? 16 : 12));
+  const chromeRows = 12 + (typing ? 4 : 0) + (references.length > 0 ? 7 : 0);
+  const listRows = Math.max(3, height - chromeRows);
   const windowStart = Math.max(0, Math.min(cursor - Math.floor(listRows / 2), shots.length - listRows));
 
   // One timer drives both the spinner frame and the elapsed seconds, so a multi-minute turn
@@ -113,6 +126,37 @@ function App() {
         run.current = null;
       });
   }, [renderer, references]);
+
+  const addReference = React.useCallback((path: string) => {
+    setReferences((prev) => [...prev, path]);
+    setStatus({ kind: "note", text: `attached ${basename(path)}`, tone: "ok" });
+  }, []);
+
+  /**
+   * Cmd+V never reaches an application as a key — the terminal turns it into a paste. Terminals
+   * that implement binary paste hand over the image bytes directly; the rest send text, or
+   * nothing at all, so both of those fall back to reading the pasteboard ourselves.
+   */
+  usePaste((event) => {
+    if (event.metadata?.mimeType?.startsWith("image/")) {
+      return addReference(attachBytes(event.bytes));
+    }
+
+    const text = new TextDecoder().decode(event.bytes).trim();
+    if (/\.(png|jpe?g|gif|webp)$/i.test(text) && existsSync(text)) {
+      return addReference(attachFile(text));
+    }
+
+    // Any other text belongs to the editor — attaching the clipboard image alongside it would
+    // be a surprise. An image-only clipboard is the case that arrives with nothing to paste.
+    if (text) return;
+
+    void pasteImageFromClipboard()
+      .then(addReference)
+      .catch(() => {
+        /* nothing on the pasteboard we can use */
+      });
+  });
 
   const save = React.useCallback(() => {
     if (!selected) return;
@@ -166,19 +210,13 @@ function App() {
         return;
       case "v":
         void pasteImageFromClipboard()
-          .then((path) => {
-            setReferences((prev) => [...prev, path]);
-            setStatus({
-              kind: "note",
-              text: `reference added (${references.length + 1}) — it goes with the next prompt`,
-              tone: "ok",
-            });
-          })
+          .then(addReference)
           .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
         return;
       case "V":
+        if (references.length === 0) return;
         setReferences([]);
-        return setStatus({ kind: "note", text: "references cleared", tone: "ok" });
+        return setStatus({ kind: "note", text: "removed all reference images", tone: "ok" });
       case "o":
         if (selected) execFile("open", [selected.path], () => {});
         return;
@@ -270,12 +308,27 @@ function App() {
         {status.kind === "idle" && selected ? (
           <text fg={MUTED}>{`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`}</text>
         ) : null}
+        {/* Thumbnails rather than a count: the whole point of a reference is what it looks like,
+            and a line of green text does not tell you which image you attached. */}
         {references.length > 0 ? (
-          <text fg={WARN}>{`${references.length} reference image(s) attached — V clears`}</text>
+          <box flexDirection="column" marginTop={1}>
+            <text fg={WARN}>
+              {`references — sent with the next prompt · shift+V removes ${
+                references.length === 1 ? "it" : "all " + references.length
+              }`}
+            </text>
+            <box flexDirection="row" gap={1} height={5}>
+              {references.map((path) => (
+                <box key={path} width={14} height={5} border borderColor={WARN}>
+                  <image flexGrow={1} width="100%" source={path} fit="fit" />
+                </box>
+              ))}
+            </box>
+          </box>
         ) : null}
         <text fg={MUTED}>
-          i prompt · j/k move · f fullscreen · v paste ref · c copy · s save · o open · r reroll · q
-          quit
+          i prompt · j/k move · f fullscreen · ⌘V/v attach ref · c copy · s save · o open · r reroll
+          · q quit
         </text>
       </box>
     </box>

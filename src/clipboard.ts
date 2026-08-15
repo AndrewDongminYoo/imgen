@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -40,6 +40,20 @@ export async function copyImageToClipboard(path: string): Promise<void> {
     "-e",
     `set the clipboard to (read (POSIX file ${JSON.stringify(path)}) as «class PNGf»)`,
   ]);
+}
+
+/** Stores bytes a terminal handed over directly, for the ones that forward binary pastes. */
+export function attachBytes(bytes: Uint8Array): string {
+  const dest = nextImagePath(attachmentDir());
+  writeFileSync(dest, bytes);
+  return dest;
+}
+
+/** Copies an image that already exists on disk into this session's attachments. */
+export function attachFile(source: string): string {
+  const dest = nextImagePath(attachmentDir());
+  copyFileSync(source, dest);
+  return dest;
 }
 
 /** Writes the clipboard image into this session's attachment directory and returns its path. */

@@ -36,8 +36,9 @@ imgen
 | `i` or `/` | focus the prompt; `enter` sends, `shift+enter` adds a line |
 | `j`/`k`    | move through the gallery                                   |
 | `f`        | hide the gallery and fill the screen                       |
-| `v`        | paste the clipboard image as a reference for the next prompt |
-| `V`        | clear the attached references                              |
+| `⌘V`       | attach the image on the clipboard as a reference           |
+| `v`        | the same thing, for terminals that swallow `⌘V`            |
+| `shift+V`  | remove every attached reference                            |
 | `c`        | copy the selected image to the clipboard                   |
 | `s`        | save the selected image into the current directory         |
 | `o`        | open it in the system viewer                               |
@@ -47,8 +48,15 @@ imgen
 
 ## Reference images
 
-`v` reads the image on the clipboard and attaches it to the next prompt, which reaches Codex
-through `codex exec -i`.
+`⌘V` attaches the image on the clipboard to the next prompt, which reaches Codex through
+`codex exec -i`. Attached references are drawn as thumbnails above the status line, so what is
+going with the prompt is visible rather than counted.
+
+`⌘V` never arrives as a keypress — the terminal turns it into a paste — so three routes are
+handled: terminals that forward binary pastes hand over the image bytes, a pasted path to an
+image file is copied in, and an image-only clipboard (which pastes nothing) is read directly.
+Pasted *text* is left to the prompt editor, so writing a prompt never attaches an image by
+accident. `v` does the last route explicitly if your terminal does something else with `⌘V`.
 Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the
 same naming Codex uses for images pasted into one of its own sessions.
 

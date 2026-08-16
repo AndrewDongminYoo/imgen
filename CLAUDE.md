@@ -15,8 +15,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `bun test` and `bun run typecheck` are the whole gate — there is no trunk config and no lint script, only a `cspell.json` for spelling.
 
-The clipboard round-trip test is skipped by default.
-Opt in with `IMGEN_CLIPBOARD_TEST=1 bun test` — macOS only, and it overwrites whatever the operator had copied, so ask first.
+The two clipboard tests are skipped by default.
+Opt in with `IMGEN_CLIPBOARD_TEST=1 bun test` — the run overwrites whatever the operator had copied, so ask first.
+Only the image round-trip is additionally macOS-gated; the text write goes through OpenTUI and is not.
 
 ## Architecture
 

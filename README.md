@@ -40,8 +40,9 @@ imgen
 | `f`        | hide the gallery and fill the screen                       |
 | `⌘V`       | attach the image on the clipboard as a reference           |
 | `v`        | the same thing, for terminals that swallow `⌘V`            |
-| `shift+V`  | remove every attached reference                            |
+| `x`        | remove every attached reference                            |
 | `c`        | copy the selected image to the clipboard                   |
+| `p`        | copy its path instead, as text                             |
 | `s`        | save the selected image into the current directory         |
 | `o`        | open it in the system viewer                               |
 | `r`        | run the last prompt again                                  |

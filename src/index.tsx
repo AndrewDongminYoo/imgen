@@ -20,6 +20,7 @@ import { generate, type Run } from "./generate.ts";
 import {
   attachFile,
   copyImageToClipboard,
+  copyTextToClipboard,
   pasteImageFromClipboard,
 } from "./clipboard.ts";
 import { listShots, type Shot } from "./library.ts";
@@ -285,20 +286,22 @@ function App() {
       case "s":
         return save();
       case "c":
-        if (selected) {
-          void copyImageToClipboard(selected.path)
-            .then(() => setStatus({ kind: "note", text: "copied to clipboard", tone: "ok" }))
-            .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
-        }
+        if (!selected) return;
+        void copyImageToClipboard(selected.path)
+          .then(() => setStatus({ kind: "note", text: "image copied to clipboard", tone: "ok" }))
+          .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
         return;
-      // `name` is always the unshifted key, so a `case "V"` never matches and shift+V fell
-      // through to the paste above — attaching another copy instead of clearing.
+      case "p":
+        if (!selected) return;
+        void copyTextToClipboard(selected.path)
+          .then(() => setStatus({ kind: "note", text: "path copied to clipboard", tone: "ok" }))
+          .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
+        return;
+      case "x":
+        if (references.length === 0) return;
+        setReferences([]);
+        return setStatus({ kind: "note", text: "removed all reference images", tone: "ok" });
       case "v":
-        if (key.shift) {
-          if (references.length === 0) return;
-          setReferences([]);
-          return setStatus({ kind: "note", text: "removed all reference images", tone: "ok" });
-        }
         void pasteImageFromClipboard()
           .then(addReference)
           .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
@@ -403,7 +406,7 @@ function App() {
         {references.length > 0 ? (
           <box flexDirection="column" marginTop={1}>
             <text fg={WARN}>
-              {`references — sent with the next prompt · shift+V removes ${
+              {`references — sent with the next prompt · x removes ${
                 references.length === 1 ? "it" : "all " + references.length
               }`}
             </text>
@@ -417,8 +420,8 @@ function App() {
           </box>
         ) : null}
         <text fg={MUTED}>
-          i prompt · j/k move · f fullscreen · ⌘V/v attach ref · c copy · s save · o open · r reroll
-          · q quit
+          i prompt · j/k move · f fullscreen · ⌘V/v attach ref · c copy · p copy path · s save ·
+          o open · r reroll · q quit
         </text>
       </box>
     </box>

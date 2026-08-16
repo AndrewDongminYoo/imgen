@@ -43,6 +43,19 @@ export async function copyImageToClipboard(path: string): Promise<void> {
   ]);
 }
 
+/**
+ * Puts text on the clipboard through OpenTUI's native pasteboard write.
+ *
+ * Unlike the image path above this needs no `osascript` and no `«class PNGf»`, so it is not
+ * macOS-only; the statuses other than `written` are reported rather than swallowed, because a
+ * silent no-op looks exactly like a successful copy until the paste comes back empty.
+ */
+export async function copyTextToClipboard(text: string): Promise<void> {
+  const result = await hostClipboard().writeText(text);
+  if (result.status === "failed") throw result.error;
+  if (result.status !== "written") throw new Error(`clipboard write ${result.status}`);
+}
+
 /** Stores bytes a terminal handed over directly, for the ones that forward binary pastes. */
 export function attachBytes(bytes: Uint8Array): string {
   const dest = nextImagePath(attachmentDir());

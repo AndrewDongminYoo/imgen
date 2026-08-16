@@ -101,6 +101,19 @@ test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST || process.platform !== "darwin")(
   },
 );
 
+// Same opt-in as above: writing text to the clipboard clobbers whatever the user had copied.
+test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST)("a path goes onto the clipboard as text", async () => {
+  const { createHostClipboard } = await import("@opentui/core");
+  const { copyTextToClipboard } = await import("./clipboard.ts");
+
+  const path = "/tmp/imgen-clipboard-check.png";
+  await copyTextToClipboard(path);
+
+  const result = await createHostClipboard().read({ preferredTypes: ["text/plain"] });
+  if (result.status !== "read") throw new Error(`clipboard read ${result.status}`);
+  expect(new TextDecoder().decode(result.representation.bytes)).toBe(path);
+});
+
 test("enhanceInstruction keeps the draft, forbids lettering, and honours a standing style", () => {
   const plain = enhanceInstruction("a fox on a bicycle", null);
   expect(plain).toContain("a fox on a bicycle");

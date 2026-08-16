@@ -45,6 +45,13 @@ const ESC = "\u001b";
  * Which key reaches an application, and what the editor then does with it, varies by terminal
  * and cannot be learned from a pty — every attempt to settle it that way here was wrong. This
  * is how to answer it from the terminal you actually use.
+ *
+ * It logs which mode owned the key as well, because the modes that swallow everything they do
+ * not claim look identical from outside to a key that never arrived: once esc fails to land,
+ * the prompt keeps every key after it and the app reads as frozen. `typing=true` on a key you
+ * expected the gallery to handle is that, and it separates the app from the terminal at a
+ * glance. Seen once in Warp, not reproducible, and gone after focus left the window and
+ * returned — OpenTUI maps kitty code 27 to `escape`, so nothing here was dropping it.
  */
 const KEY_LOG = process.env.IMGEN_KEY_LOG;
 
@@ -239,7 +246,8 @@ function App() {
       setTimeout(() => {
         appendFileSync(
           KEY_LOG,
-          `name=${seen.name} filtering=${filtering} filter=${JSON.stringify(filter)} shift=${seen.shift} ctrl=${seen.ctrl} option=${seen.option} ` +
+          `name=${seen.name} typing=${typing} filtering=${filtering} reading=${reading} ` +
+            `filter=${JSON.stringify(filter)} shift=${seen.shift} ctrl=${seen.ctrl} option=${seen.option} ` +
             `seq=${JSON.stringify(seen.sequence)} buffer=${JSON.stringify(
               editor.current?.editBuffer.getText() ?? null,
             )}\n`,

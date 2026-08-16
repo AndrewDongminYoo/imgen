@@ -29,7 +29,12 @@ export type PromptIndex = Record<string, PromptRecord>;
 export function loadPrompts(path: string = PROMPTS_PATH): PromptIndex {
   if (!existsSync(path)) return {};
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as PromptIndex;
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    // `null` parses cleanly and then throws on the first property read, which happens inside the
+    // gallery's initial state — the app would not start. Anything that is not a plain object is
+    // not an index, so it degrades the same way a syntax error does.
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    return parsed as PromptIndex;
   } catch {
     // Losing the labels is a worse day, not a broken app: the gallery still lists every image.
     return {};

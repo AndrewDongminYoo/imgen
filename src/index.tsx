@@ -342,7 +342,10 @@ function App() {
         return setFiltering(true); // keeps the current query, so `/` refines rather than restarts
       case "j":
       case "down":
-        return setCursor((c) => Math.min(c + 1, visible.length - 1));
+        // Clamped at zero as well as at the end: a filter matching nothing makes the upper bound
+        // -1, and a negative cursor survives the filter being cleared, leaving the gallery with
+        // nothing selected and every image action silently doing nothing.
+        return setCursor((c) => Math.max(0, Math.min(c + 1, visible.length - 1)));
       case "k":
       case "up":
         return setCursor((c) => Math.max(c - 1, 0));

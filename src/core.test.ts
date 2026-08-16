@@ -85,6 +85,13 @@ test("a corrupt index reads as empty rather than stopping the app", () => {
   const index = fakeIndexPath();
   writeFileSync(index, "{ not json");
   expect(loadPrompts(index)).toEqual({});
+
+  // `null` is the dangerous one: it parses, and the first property read then throws inside the
+  // gallery's initial state, so the app would fail to start rather than lose its labels.
+  for (const valid of ["null", "[]", "42", '"a string"']) {
+    writeFileSync(index, valid);
+    expect(loadPrompts(index)).toEqual({});
+  }
 });
 
 test("listShots carries the recorded prompt, and nothing for images it never made", () => {

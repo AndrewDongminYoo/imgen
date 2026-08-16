@@ -68,10 +68,14 @@ function galleryLabel(shot: Shot, focused: boolean): string {
   );
 }
 
-type Status =
-  | { kind: "idle" }
-  | { kind: "generating"; startedAt: number }
-  | { kind: "note"; text: string; tone: "ok" | "error" };
+/**
+ * Only what to tell the user, never what is happening.
+ *
+ * A run's progress lives in `runningSince` instead, because the two have different lifetimes:
+ * a note is transient and anything may write one — including a refusal fired mid-run — while
+ * the progress indicator has to survive until the child exits.
+ */
+type Status = { kind: "idle" } | { kind: "note"; text: string; tone: "ok" | "error" };
 
 function App() {
   const renderer = useRenderer();
@@ -81,6 +85,7 @@ function App() {
   const editor = React.useRef<TextareaRenderable | null>(null);
   const [lastPrompt, setLastPrompt] = React.useState("");
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
+  const [runningSince, setRunningSince] = React.useState<number | null>(null);
   const [ticks, setTicks] = React.useState(0);
   const [activity, setActivity] = React.useState("");
   const [references, setReferences] = React.useState<string[]>([]);
@@ -110,10 +115,10 @@ function App() {
   // One timer drives both the spinner frame and the elapsed seconds, so a multi-minute turn
   // never looks like a hang.
   React.useEffect(() => {
-    if (status.kind !== "generating" && !enhancing) return;
+    if (runningSince === null && !enhancing) return;
     const timer = setInterval(() => setTicks((n) => n + 1), TICK_MS);
     return () => clearInterval(timer);
-  }, [status, enhancing]);
+  }, [runningSince, enhancing]);
 
   /**
    * Returns whether the description was consumed, so a caller holding a draft can keep it.
@@ -132,7 +137,8 @@ function App() {
       return false;
     }
     setLastPrompt(description);
-    setStatus({ kind: "generating", startedAt: Date.now() });
+    setStatus({ kind: "idle" }); // drop whatever the last run said; this one has its own answer
+    setRunningSince(Date.now());
     setTicks(0);
     setActivity("");
 
@@ -150,10 +156,17 @@ function App() {
         });
       })
       .catch((error: Error) => {
+        // A cancelled run has already had its say, and a superseded one is not the news.
+        if (run.current !== current) return;
         setStatus({ kind: "note", text: error.message.split("\n")[0] ?? "failed", tone: "error" });
       })
       .finally(() => {
+        // Only if this run still owns the slot: a cancelled run's close event arrives late, and
+        // clearing unconditionally would drop the handle of whatever was started after it and
+        // stop the successor's progress indicator halfway through.
+        if (run.current !== current) return;
         run.current = null;
+        setRunningSince(null);
       });
     return true;
   }, [renderer, references]);
@@ -257,7 +270,9 @@ function App() {
         // remounting; mirroring every keystroke into React state would redraw the image too.
         const description = editor.current?.editBuffer.getText() ?? "";
         // Clearing the editor before the run is accepted would throw the draft away on refusal.
-        if (!start(description)) return;
+        // A blank draft is not a refusal — there is nothing to keep, so enter closes the editor
+        // as it always did.
+        if (description.trim() && !start(description)) return;
         setTyping(false);
         setPromptGeneration((n) => n + 1);
       }
@@ -314,7 +329,11 @@ function App() {
         return;
       case "escape":
         if (run.current) {
+          // Released here rather than when the child's close event lands: SIGTERM can take a
+          // while, or be ignored outright, and until the slot is free no new run may start.
           run.current.cancel();
+          run.current = null;
+          setRunningSince(null);
           setStatus({ kind: "note", text: "cancelled", tone: "error" });
         }
         return;
@@ -384,11 +403,11 @@ function App() {
       </box>
 
       <box flexDirection="column" marginTop={1}>
-        {status.kind === "generating" ? (
+        {runningSince !== null ? (
           <box flexDirection="column">
             <text fg={ACCENT}>
               {`${SPINNER[ticks % SPINNER.length]} generating… ${Math.floor(
-                (Date.now() - status.startedAt) / 1000,
+                (Date.now() - runningSince) / 1000,
               )}s — esc cancels`}
             </text>
             {/* Codex reports no percentage, so its own last line is the closest thing to one. */}
@@ -398,7 +417,10 @@ function App() {
         {status.kind === "note" ? (
           <text fg={status.tone === "ok" ? OK : ERROR}>{status.text}</text>
         ) : null}
-        {status.kind === "idle" && selected ? (
+        {/* `chromeRows` leaves this box three lines, which a run already fills with the spinner,
+            Codex's activity, and any note. The path is what gives way — it is the one of the
+            four that is still on screen a keypress later. */}
+        {status.kind === "idle" && runningSince === null && selected ? (
           <text fg={MUTED}>{`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`}</text>
         ) : null}
         {/* Thumbnails rather than a count: the whole point of a reference is what it looks like,

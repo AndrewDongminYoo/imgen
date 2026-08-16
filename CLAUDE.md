@@ -38,6 +38,8 @@ One run can emit several images into one session directory, and a run that produ
 
 `index.tsx` holds the whole UI and all key handling in one `useKeyboard`.
 The `typing` branch returns early — a focused editor owns every key that branch does not claim.
+Attaching a reference is the exception: ⌘V never arrives as a key at all, so it lands in a separate `usePaste` handler that branches on the pasted *text*, not on any metadata.
+Read the `warp-paste-shapes` memory before changing that branch — the shapes in it are measured, not inferred.
 The textarea is uncontrolled: its text is read off `editor.current.editBuffer` and cleared by remounting through `key={promptGeneration}`, because mirroring keystrokes into React state would redraw the image on every character.
 
 `clipboard.ts` writes attachments to `~/.codex/attachments/<session>/image-N.png`, the same layout Codex uses for images pasted into its own sessions.

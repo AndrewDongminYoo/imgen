@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { version } from "../package.json";
+
 import { createCliRenderer, resolveImageRenderProtocol } from "@opentui/core";
 import {
   createRoot,
@@ -582,6 +584,15 @@ function App() {
       </box>
     </box>
   );
+}
+
+// This returns before the renderer is created: createCliRenderer() takes exclusive ownership of
+// stdin and stdout, so a flag answered after it would be answered onto a screen the TUI has
+// already claimed. The number comes from package.json rather than being restated here, so it
+// cannot drift from the release it is cut against; Bun bundles the import into the binary.
+if (process.argv.includes("--version")) {
+  process.stdout.write(`imgen ${version}\n`);
+  process.exit(0);
 }
 
 const renderer = await createCliRenderer();

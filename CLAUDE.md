@@ -45,6 +45,10 @@ The textarea is uncontrolled: its text is read off `editor.current.editBuffer` a
 
 `clipboard.ts` writes attachments to `~/.codex/attachments/<session>/image-N.png`, the same layout Codex uses for images pasted into its own sessions.
 
+`prompts.ts` owns the only state imgen keeps of its own: which prompt produced which image, in `~/.config/imgen/prompts.json`, joined onto `Shot.prompt` by `listShots`.
+It records forward and never excavates — README §"What made each picture" holds the measurements behind that choice.
+Nothing else in the app persists anything, so a missing or corrupt index degrades to the pre-existing behaviour rather than failing.
+
 ## Constraints that the code alone does not explain
 
 - **`q` must call `renderer.destroy()` before `process.exit`.** Skipping OpenTUI's teardown leaves mouse reporting (1000/1002/1003/1006), the alternate screen, and the hidden cursor set in the operator's shell.

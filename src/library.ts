@@ -2,6 +2,8 @@ import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { loadPrompts, type PromptIndex } from "./prompts.ts";
+
 /** Codex writes every generated image here, one directory per agent session. */
 export const LIBRARY = join(homedir(), ".codex", "generated_images");
 
@@ -10,10 +12,12 @@ export interface Shot {
   session: string;
   createdAt: number;
   bytes: number;
+  /** What imgen was asked for, when imgen is what made it. Absent for everything older. */
+  prompt?: string;
 }
 
 /** Every generated image, newest first. */
-export function listShots(root: string = LIBRARY): Shot[] {
+export function listShots(root: string = LIBRARY, prompts: PromptIndex = loadPrompts()): Shot[] {
   const shots: Shot[] = [];
 
   let sessions: string[];
@@ -37,11 +41,29 @@ export function listShots(root: string = LIBRARY): Shot[] {
       const path = join(root, session, file);
       const stat = statSync(path, { throwIfNoEntry: false });
       if (!stat) continue;
-      shots.push({ path, session, createdAt: stat.mtimeMs, bytes: stat.size });
+      shots.push({
+        path,
+        session,
+        createdAt: stat.mtimeMs,
+        bytes: stat.size,
+        prompt: prompts[path]?.prompt,
+      });
     }
   }
 
   return shots.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Narrows the gallery to the images whose prompt contains `query`.
+ *
+ * An unlabelled image cannot match anything, so filtering hides the library imgen did not make.
+ * That is the point — an empty query is not a filter and gives all of them back.
+ */
+export function filterShots(shots: Shot[], query: string): Shot[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return shots;
+  return shots.filter((shot) => shot.prompt?.toLowerCase().includes(needle));
 }
 
 /**

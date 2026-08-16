@@ -23,7 +23,8 @@ import {
   copyTextToClipboard,
   pasteImageFromClipboard,
 } from "./clipboard.ts";
-import { listShots, type Shot } from "./library.ts";
+import { filterShots, listShots, type Shot } from "./library.ts";
+import { recordPrompt } from "./prompts.ts";
 
 const ACCENT = "#8B5CF6";
 const MUTED = "#9CA3AF";
@@ -47,7 +48,12 @@ const ESC = "\u001b";
  */
 const KEY_LOG = process.env.IMGEN_KEY_LOG;
 
-const shortName = (shot: Shot): string => basename(shot.path).replace(/^exec-/, "").slice(0, 12);
+/** A prompt is a paragraph and carries newlines; one raw would desynchronise every row beneath. */
+const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+/** What the image is, when that is known — a hex filename tells you nothing about the picture. */
+const shortName = (shot: Shot): string =>
+  (shot.prompt ? oneLine(shot.prompt) : basename(shot.path).replace(/^exec-/, "")).slice(0, 12);
 
 /** At most three characters: a longer stamp pushes the gallery row past its column and wraps. */
 function ago(ms: number): string {
@@ -91,13 +97,19 @@ function App() {
   const [references, setReferences] = React.useState<string[]>([]);
   const [full, setFull] = React.useState(false);
   const [promptGeneration, setPromptGeneration] = React.useState(0);
+  // The query stays applied after enter so j/k work again; `filtering` is only about who owns
+  // the keystrokes. esc clears both.
+  const [filter, setFilter] = React.useState("");
+  const [filtering, setFiltering] = React.useState(false);
   const run = React.useRef<Run | null>(null);
   const rewrite = React.useRef<EnhanceRun | null>(null);
   const [enhancing, setEnhancing] = React.useState(false);
   const config = React.useMemo(loadConfig, []);
 
   const protocol = resolveImageRenderProtocol("auto", renderer.capabilities, true);
-  const selected: Shot | undefined = shots[Math.min(cursor, shots.length - 1)];
+  // Everything below navigates the filtered view; `shots` is only the source it is drawn from.
+  const visible = React.useMemo(() => filterShots(shots, filter), [shots, filter]);
+  const selected: Shot | undefined = visible[Math.min(cursor, visible.length - 1)];
 
   /**
    * The gallery is a window onto the library, not the whole of it.
@@ -108,9 +120,14 @@ function App() {
    * carrying the preview, so the rest of the image arrives as visible base64 text.
    */
   const { height } = useTerminalDimensions();
-  const chromeRows = 12 + (typing ? 4 : 0) + (references.length > 0 ? 7 : 0);
+  const showFilter = filtering || filter !== "";
+  const chromeRows =
+    12 + (typing ? 4 : 0) + (references.length > 0 ? 7 : 0) + (showFilter ? 1 : 0);
   const listRows = Math.max(3, height - chromeRows);
-  const windowStart = Math.max(0, Math.min(cursor - Math.floor(listRows / 2), shots.length - listRows));
+  const windowStart = Math.max(
+    0,
+    Math.min(cursor - Math.floor(listRows / 2), visible.length - listRows),
+  );
 
   // One timer drives both the spinner frame and the elapsed seconds, so a multi-minute turn
   // never looks like a hang.
@@ -146,6 +163,8 @@ function App() {
     run.current = current;
     current.done
       .then((produced) => {
+        // Recorded before the library is re-read, so the join picks the new labels up at once.
+        recordPrompt(produced.map((shot) => shot.path), description);
         setShots(listShots());
         setCursor(0);
         renderer.requestRender();
@@ -215,7 +234,7 @@ function App() {
       setTimeout(() => {
         appendFileSync(
           KEY_LOG,
-          `name=${seen.name} shift=${seen.shift} ctrl=${seen.ctrl} option=${seen.option} ` +
+          `name=${seen.name} filtering=${filtering} filter=${JSON.stringify(filter)} shift=${seen.shift} ctrl=${seen.ctrl} option=${seen.option} ` +
             `seq=${JSON.stringify(seen.sequence)} buffer=${JSON.stringify(
               editor.current?.editBuffer.getText() ?? null,
             )}\n`,
@@ -279,6 +298,36 @@ function App() {
       return; // the focused input owns every other key
     }
 
+    /**
+     * The query is typed straight into state rather than through a focused input.
+     *
+     * A second editable element would need its own focus handling and its own branch here, for
+     * one line of text with no wrapping and no cursor — the manual version is the smaller one.
+     */
+    if (filtering) {
+      if (key.name === "escape") {
+        setFilter("");
+        setFiltering(false);
+        return;
+      }
+      if (key.name === "return") {
+        setFiltering(false); // applied and still showing; j/k navigate what is left
+        return;
+      }
+      if (key.name === "backspace") {
+        setFilter((q) => q.slice(0, -1));
+        setCursor(0);
+        return;
+      }
+      // Printable characters only, read off the sequence: `name` reports "space" for a space and
+      // nothing usable for punctuation.
+      if (key.sequence.length === 1 && key.sequence >= " " && key.sequence <= "~") {
+        setFilter((q) => q + key.sequence);
+        setCursor(0);
+      }
+      return;
+    }
+
     switch (key.name) {
       case "q":
         // Exiting straight from here would skip OpenTUI's teardown, and the terminal keeps
@@ -288,11 +337,12 @@ function App() {
         renderer.destroy();
         return process.exit(0);
       case "i":
-      case "/":
         return setTyping(true);
+      case "/":
+        return setFiltering(true); // keeps the current query, so `/` refines rather than restarts
       case "j":
       case "down":
-        return setCursor((c) => Math.min(c + 1, shots.length - 1));
+        return setCursor((c) => Math.min(c + 1, visible.length - 1));
       case "k":
       case "up":
         return setCursor((c) => Math.max(c - 1, 0));
@@ -324,9 +374,13 @@ function App() {
       case "o":
         if (selected) execFile("open", [selected.path], () => {});
         return;
-      case "r":
-        if (lastPrompt) start(lastPrompt);
+      case "r": {
+        // Roll the selected image's own prompt again — "this one, differently" is what r is for
+        // once the gallery knows what made each picture. Falls back to the session's last.
+        const again = selected?.prompt ?? lastPrompt;
+        if (again) start(again);
         return;
+      }
       case "escape":
         if (run.current) {
           // Released here rather than when the child's close event lands: SIGTERM can take a
@@ -346,7 +400,9 @@ function App() {
     <box flexDirection="column" flexGrow={1} padding={1}>
       <box flexDirection="row" gap={1}>
         <text fg={ACCENT}>imgen</text>
-        <text fg={MUTED}>{`${shots.length} images · ${protocol}`}</text>
+        <text fg={MUTED}>
+          {`${visible.length === shots.length ? shots.length : `${visible.length}/${shots.length}`} images · ${protocol}`}
+        </text>
         {protocol === "blocks" ? (
           <text fg={WARN}>no pixel protocol — previews are coarse</text>
         ) : null}
@@ -376,10 +432,20 @@ function App() {
         />
       </box>
 
+      {/* Only images imgen made carry a prompt, so a filter necessarily hides the rest of the
+          library. Saying so beats an empty gallery that looks like a bug. */}
+      {showFilter ? (
+        <text fg={filtering ? ACCENT : WARN}>
+          {`filter /${filter}${filtering ? "█" : ""} — ${visible.length} of ${shots.length}, only what imgen generated · ${
+            filtering ? "enter applies · esc clears" : "/ refines · esc in / clears"
+          }`}
+        </text>
+      ) : null}
+
       <box flexDirection="row" flexGrow={1} marginTop={1} gap={1}>
         {full ? null : (
           <box flexDirection="column" width={GALLERY_WIDTH} height={listRows} overflow="hidden">
-            {shots.slice(windowStart, windowStart + listRows).map((shot, offset) => {
+            {visible.slice(windowStart, windowStart + listRows).map((shot, offset) => {
               const index = windowStart + offset;
               return (
                 <text key={shot.path} fg={index === cursor ? ACCENT : MUTED}>
@@ -387,7 +453,9 @@ function App() {
                 </text>
               );
             })}
-            {shots.length === 0 ? <text fg={MUTED}>nothing generated yet</text> : null}
+            {visible.length === 0 ? (
+              <text fg={MUTED}>{filter ? "nothing matches" : "nothing generated yet"}</text>
+            ) : null}
           </box>
         )}
 
@@ -421,7 +489,13 @@ function App() {
             Codex's activity, and any note. The path is what gives way — it is the one of the
             four that is still on screen a keypress later. */}
         {status.kind === "idle" && runningSince === null && selected ? (
-          <text fg={MUTED}>{`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`}</text>
+          <text fg={MUTED}>
+            {/* The prompt is what you want to read; the path is a keypress away on p. Sliced
+                because a prompt is a paragraph and a wrapped line costs the gallery a row. */}
+            {`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${
+              selected.prompt ? oneLine(selected.prompt) : selected.path
+            }`.slice(0, 110)}
+          </text>
         ) : null}
         {/* Thumbnails rather than a count: the whole point of a reference is what it looks like,
             and a line of green text does not tell you which image you attached. */}
@@ -442,8 +516,8 @@ function App() {
           </box>
         ) : null}
         <text fg={MUTED}>
-          i prompt · j/k move · f fullscreen · ⌘V/v attach ref · c copy · p copy path · s save ·
-          o open · r reroll · q quit
+          i prompt · / filter · j/k move · f fullscreen · ⌘V/v attach ref · c copy · p copy path ·
+          s save · o open · r reroll · q quit
         </text>
       </box>
     </box>

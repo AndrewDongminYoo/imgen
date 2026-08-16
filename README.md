@@ -33,7 +33,8 @@ imgen
 
 | Key        | Action                                                     |
 | ---------- | ---------------------------------------------------------- |
-| `i` or `/` | focus the prompt; `enter` generates                        |
+| `i`        | focus the prompt; `enter` generates                        |
+| `/`        | filter the gallery by prompt; `enter` applies, `esc` clears |
 | `tab`      | let Codex flesh out the draft — composition, light, style  |
 | `shift+enter` or `option+enter` | new line in the prompt                 |
 | `j`/`k`    | move through the gallery                                   |
@@ -45,7 +46,7 @@ imgen
 | `p`        | copy its path instead, as text                             |
 | `s`        | save the selected image into the current directory         |
 | `o`        | open it in the system viewer                               |
-| `r`        | run the last prompt again                                  |
+| `r`        | roll the selected image's prompt again, or the last one    |
 | `esc`      | cancel a running generation                                |
 | `q`        | quit                                                       |
 
@@ -86,6 +87,23 @@ modified returns already cover the need.
 
 Run with `IMGEN_KEY_LOG=/tmp/imgen-keys.log` to see what your terminal delivers for any key,
 alongside what the editor did with it.
+
+## What made each picture
+
+A generation records its prompt against every image it produced, in
+`~/.config/imgen/prompts.json`. The gallery then labels the image with the prompt instead of its
+hex filename, the status line carries the whole thing, and `/` filters the library down to the
+prompts that contain what you type. `r` rolls the selected image's own prompt again — "this one,
+differently" — falling back to the session's last prompt for an image it has no record of.
+
+Only imgen's own runs are recorded, so a filter necessarily hides everything Codex made before
+this existed; the filter line says so, and how many of the library are left.
+
+Recovering the older prompts was measured and rejected rather than skipped. The session rollout
+survives for most of them — 19 of 20 sampled — but `session_index.json` names none of the 62
+library sessions, and the image tool is reached differently from one session to the next (a
+built-in tool in some, a skill through `exec` in others), so there is no single shape to parse.
+Recording forward is exact; excavating backwards would be a guess wearing a label.
 
 ### Standing style
 

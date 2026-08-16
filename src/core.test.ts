@@ -5,7 +5,8 @@ import { expect, test } from "bun:test";
 
 import { enhanceInstruction } from "./enhance.ts";
 import { buildPrompt } from "./generate.ts";
-import { listShots, newSince, snapshot } from "./library.ts";
+import { filterShots, listShots, newSince, snapshot } from "./library.ts";
+import { loadPrompts, recordPrompt } from "./prompts.ts";
 
 function fakeLibrary(): string {
   return mkdtempSync(join(tmpdir(), "imgen-lib-"));
@@ -59,6 +60,58 @@ test("a run that produces nothing reports nothing rather than the newest existin
 
   const before = snapshot(root);
   expect(newSince(before, root)).toEqual([]);
+});
+
+function fakeIndexPath(): string {
+  return join(mkdtempSync(join(tmpdir(), "imgen-prompts-")), "prompts.json");
+}
+
+test("recordPrompt survives a round trip and keeps what earlier runs wrote", () => {
+  const index = fakeIndexPath();
+  expect(loadPrompts(index)).toEqual({});
+
+  recordPrompt(["/lib/a.png", "/lib/b.png"], "a red fox", index);
+  recordPrompt(["/lib/c.png"], "a blue heron", index);
+
+  const stored = loadPrompts(index);
+  expect(Object.keys(stored).sort()).toEqual(["/lib/a.png", "/lib/b.png", "/lib/c.png"]);
+  // Both images of one run carry that run's prompt — the run is what has a prompt, not the file.
+  expect(stored["/lib/a.png"]?.prompt).toBe("a red fox");
+  expect(stored["/lib/b.png"]?.prompt).toBe("a red fox");
+  expect(stored["/lib/c.png"]?.prompt).toBe("a blue heron");
+});
+
+test("a corrupt index reads as empty rather than stopping the app", () => {
+  const index = fakeIndexPath();
+  writeFileSync(index, "{ not json");
+  expect(loadPrompts(index)).toEqual({});
+});
+
+test("listShots carries the recorded prompt, and nothing for images it never made", () => {
+  const root = fakeLibrary();
+  const mine = addShot(root, "s1", "exec-mine.png");
+  addShot(root, "s1", "exec-someone-elses.png");
+
+  const shots = listShots(root, { [mine]: { prompt: "a red fox", at: 1 } });
+  expect(shots.find((s) => s.path === mine)?.prompt).toBe("a red fox");
+  // The 197 images Codex made before imgen existed have no prompt and must still list.
+  expect(shots.find((s) => s.path !== mine)?.prompt).toBeUndefined();
+  expect(shots).toHaveLength(2);
+});
+
+test("filterShots matches the prompt case-insensitively and drops the unlabelled", () => {
+  const shots = [
+    { path: "/a.png", session: "s", createdAt: 3, bytes: 1, prompt: "A Red Fox on a bicycle" },
+    { path: "/b.png", session: "s", createdAt: 2, bytes: 1, prompt: "a blue heron" },
+    { path: "/c.png", session: "s", createdAt: 1, bytes: 1 },
+  ];
+
+  expect(filterShots(shots, "red").map((s) => s.path)).toEqual(["/a.png"]);
+  expect(filterShots(shots, "RED").map((s) => s.path)).toEqual(["/a.png"]);
+  expect(filterShots(shots, "a").map((s) => s.path)).toEqual(["/a.png", "/b.png"]);
+  // An empty query is not a filter — it is the whole library, unlabelled images included.
+  expect(filterShots(shots, "")).toHaveLength(3);
+  expect(filterShots(shots, "zebra")).toHaveLength(0);
 });
 
 test("buildPrompt names the tool, the output, and forbids side work", () => {

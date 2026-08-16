@@ -35,6 +35,7 @@ imgen
 | ---------- | ---------------------------------------------------------- |
 | `i`        | focus the prompt; `enter` generates                        |
 | `/`        | filter the gallery by prompt; `enter` applies, `esc` clears |
+| `enter`    | read the selected image's prompt in full; `j`/`k` scroll it |
 | `tab`      | let Codex flesh out the draft — composition, light, style  |
 | `shift+enter` or `option+enter` | new line in the prompt                 |
 | `j`/`k`    | move through the gallery                                   |
@@ -92,9 +93,15 @@ alongside what the editor did with it.
 
 A generation records its prompt against every image it produced, in
 `~/.config/imgen/prompts.json`. The gallery then labels the image with the prompt instead of its
-hex filename, the status line carries the whole thing, and `/` filters the library down to the
-prompts that contain what you type. `r` rolls the selected image's own prompt again — "this one,
-differently" — falling back to the session's last prompt for an image it has no record of.
+hex filename, and `/` filters the library down to the prompts that contain what you type. `r`
+rolls the selected image's own prompt again — "this one, differently" — falling back to the
+session's last prompt for an image it has no record of.
+
+A label is 22 characters and a prompt is a paragraph, so `enter` opens the whole thing in a
+scrollable box below the picture, `j`/`k` scrolling it while it is open.
+It sits beside the image rather than over it: a kitty placement is drawn by the terminal itself
+rather than into the cell grid, so which one wins where they overlap is the emulator's decision
+and not something this side can settle. Splitting the pane looks the same in all three protocols.
 
 Only imgen's own runs are recorded, so a filter necessarily hides everything Codex made before
 this existed; the filter line says so, and how many of the library are left.

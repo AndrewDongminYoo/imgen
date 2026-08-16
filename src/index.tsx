@@ -12,7 +12,7 @@ import { appendFileSync, copyFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as React from "react";
 
-import type { TextareaRenderable } from "@opentui/core";
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 
 import { loadConfig } from "./config.ts";
 import { enhance, type EnhanceRun } from "./enhance.ts";
@@ -53,7 +53,7 @@ const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim();
 
 /** What the image is, when that is known — a hex filename tells you nothing about the picture. */
 const shortName = (shot: Shot): string =>
-  (shot.prompt ? oneLine(shot.prompt) : basename(shot.path).replace(/^exec-/, "")).slice(0, 12);
+  (shot.prompt ? oneLine(shot.prompt) : basename(shot.path).replace(/^exec-/, "")).slice(0, 22);
 
 /** At most three characters: a longer stamp pushes the gallery row past its column and wraps. */
 function ago(ms: number): string {
@@ -64,7 +64,10 @@ function ago(ms: number): string {
   return `${Math.floor(minutes / 1440)}d`;
 }
 
-const GALLERY_WIDTH = 22;
+const GALLERY_WIDTH = 32;
+
+/** Rows the prompt reader takes out of the preview; the image keeps the rest. */
+const READER_ROWS = 10;
 
 /** Fixed-width and hard-truncated, because a wrapped row desynchronises every row beneath it. */
 function galleryLabel(shot: Shot, focused: boolean): string {
@@ -101,6 +104,8 @@ function App() {
   // the keystrokes. esc clears both.
   const [filter, setFilter] = React.useState("");
   const [filtering, setFiltering] = React.useState(false);
+  const [reading, setReading] = React.useState(false);
+  const reader = React.useRef<ScrollBoxRenderable | null>(null);
   const run = React.useRef<Run | null>(null);
   const rewrite = React.useRef<EnhanceRun | null>(null);
   const [enhancing, setEnhancing] = React.useState(false);
@@ -328,6 +333,17 @@ function App() {
       return;
     }
 
+    /**
+     * While the prompt is open, j/k scroll it instead of walking the gallery — moving the
+     * selection under an open reader would swap the text out from under the line being read.
+     * Everything else still applies to the selected image, so q, s, c and p keep working.
+     */
+    if (reading) {
+      if (key.name === "escape" || key.name === "return") return setReading(false);
+      if (key.name === "j" || key.name === "down") return void reader.current?.scrollBy(2);
+      if (key.name === "k" || key.name === "up") return void reader.current?.scrollBy(-2);
+    }
+
     switch (key.name) {
       case "q":
         // Exiting straight from here would skip OpenTUI's teardown, and the terminal keeps
@@ -338,6 +354,16 @@ function App() {
         return process.exit(0);
       case "i":
         return setTyping(true);
+      case "return":
+        // Inspecting what is selected is what enter means everywhere else, and it was unbound.
+        if (!selected?.prompt) {
+          return setStatus({
+            kind: "note",
+            text: "no prompt recorded — imgen only knows the ones it generated",
+            tone: "error",
+          });
+        }
+        return setReading(true);
       case "/":
         return setFiltering(true); // keeps the current query, so `/` refines rather than restarts
       case "j":
@@ -462,14 +488,28 @@ function App() {
           </box>
         )}
 
-        {/* The image has no intrinsic size, so without flexGrow it collapses to a thumbnail in
-            the corner of a full-size box. `fit` then scales within whatever it was given. */}
-        <box flexGrow={1} border borderColor={MUTED}>
-          {selected ? (
-            <image flexGrow={1} width="100%" source={selected.path} fit="fit" />
-          ) : (
-            <text fg={MUTED}>no image</text>
-          )}
+        <box flexGrow={1} flexDirection="column" gap={1}>
+          {/* The image has no intrinsic size, so without flexGrow it collapses to a thumbnail in
+              the corner of a full-size box. `fit` then scales within whatever it was given. */}
+          <box flexGrow={1} border borderColor={MUTED}>
+            {selected ? (
+              <image flexGrow={1} width="100%" source={selected.path} fit="fit" />
+            ) : (
+              <text fg={MUTED}>no image</text>
+            )}
+          </box>
+
+          {/* Beside the image rather than over it: a kitty placement is drawn by the terminal,
+              not into the cell grid, so what wins where text overlaps it is the emulator's call
+              and cannot be settled from here. Splitting the pane looks the same everywhere. */}
+          {reading && selected?.prompt ? (
+            <box height={READER_ROWS} border borderColor={ACCENT} flexDirection="column">
+              <text fg={ACCENT}>prompt — j/k scroll · enter or esc closes</text>
+              <scrollbox ref={reader} flexGrow={1}>
+                <text fg={MUTED}>{selected.prompt}</text>
+              </scrollbox>
+            </box>
+          ) : null}
         </box>
       </box>
 
@@ -490,14 +530,14 @@ function App() {
         ) : null}
         {/* `chromeRows` leaves this box three lines, which a run already fills with the spinner,
             Codex's activity, and any note. The path is what gives way — it is the one of the
-            four that is still on screen a keypress later. */}
+            four that is still on screen a keypress later.
+
+            The path and not the prompt, because enter opens the prompt in full: a paragraph
+            squeezed onto this line was neither readable nor reliably present, since a note
+            replaces the row and nothing ever sets one back to idle. */}
         {status.kind === "idle" && runningSince === null && selected ? (
           <text fg={MUTED}>
-            {/* The prompt is what you want to read; the path is a keypress away on p. Sliced
-                because a prompt is a paragraph and a wrapped line costs the gallery a row. */}
-            {`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${
-              selected.prompt ? oneLine(selected.prompt) : selected.path
-            }`.slice(0, 110)}
+            {`${(selected.bytes / 1_048_576).toFixed(1)} MB · ${selected.path}`.slice(0, 110)}
           </text>
         ) : null}
         {/* Thumbnails rather than a count: the whole point of a reference is what it looks like,
@@ -519,8 +559,8 @@ function App() {
           </box>
         ) : null}
         <text fg={MUTED}>
-          i prompt · / filter · j/k move · f fullscreen · ⌘V/v attach ref · c copy · p copy path ·
-          s save · o open · r reroll · q quit
+          i prompt · enter read prompt · / filter · j/k move · f fullscreen · ⌘V/v attach ref ·
+          c copy · p copy path · s save · o open · r reroll · q quit
         </text>
       </box>
     </box>

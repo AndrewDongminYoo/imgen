@@ -114,8 +114,22 @@ function App() {
     return () => clearInterval(timer);
   }, [status, enhancing]);
 
-  const start = React.useCallback((description: string) => {
-    if (!description.trim()) return;
+  /**
+   * Returns whether the description was consumed, so a caller holding a draft can keep it.
+   *
+   * A second run must not start over the first: overwriting `run.current` orphans the child,
+   * which keeps running and billing while `esc` reaches only the newer one.
+   */
+  const start = React.useCallback((description: string): boolean => {
+    if (!description.trim()) return false;
+    if (run.current) {
+      setStatus({
+        kind: "note",
+        text: "a generation is already running — esc cancels it",
+        tone: "error",
+      });
+      return false;
+    }
     setLastPrompt(description);
     setStatus({ kind: "generating", startedAt: Date.now() });
     setTicks(0);
@@ -140,6 +154,7 @@ function App() {
       .finally(() => {
         run.current = null;
       });
+    return true;
   }, [renderer, references]);
 
   const addReference = React.useCallback((path: string) => {
@@ -240,9 +255,10 @@ function App() {
         // The editor is uncontrolled, so its text is read off the buffer and cleared by
         // remounting; mirroring every keystroke into React state would redraw the image too.
         const description = editor.current?.editBuffer.getText() ?? "";
+        // Clearing the editor before the run is accepted would throw the draft away on refusal.
+        if (!start(description)) return;
         setTyping(false);
         setPromptGeneration((n) => n + 1);
-        start(description);
       }
       return; // the focused input owns every other key
     }
@@ -291,7 +307,7 @@ function App() {
         if (selected) execFile("open", [selected.path], () => {});
         return;
       case "r":
-        if (lastPrompt && status.kind !== "generating") start(lastPrompt);
+        if (lastPrompt) start(lastPrompt);
         return;
       case "escape":
         if (run.current) {

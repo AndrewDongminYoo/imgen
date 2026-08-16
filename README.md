@@ -35,7 +35,7 @@ imgen
 | ---------- | ---------------------------------------------------------- |
 | `i`        | focus the prompt; `enter` generates                        |
 | `/`        | filter the gallery by prompt; `enter` applies, `esc` clears |
-| `enter`    | read the selected image's prompt in full; `j`/`k` scroll it |
+| `enter`    | read the prompt in full; `j`/`k` scroll it, `c` copies it  |
 | `tab`      | let Codex flesh out the draft — composition, light, style  |
 | `shift+enter` or `option+enter` | new line in the prompt                 |
 | `j`/`k`    | move through the gallery                                   |
@@ -98,7 +98,8 @@ rolls the selected image's own prompt again — "this one, differently" — fall
 session's last prompt for an image it has no record of.
 
 A label is 22 characters and a prompt is a paragraph, so `enter` opens the whole thing in a
-scrollable box below the picture, `j`/`k` scrolling it while it is open.
+scrollable box below the picture, `j`/`k` scrolling it and `c` copying it while it is open —
+`c` copies whatever you are looking at, which in there is the text rather than the picture.
 It sits beside the image rather than over it: a kitty placement is drawn by the terminal itself
 rather than into the cell grid, so which one wins where they overlap is the emulator's decision
 and not something this side can settle. Splitting the pane looks the same in all three protocols.

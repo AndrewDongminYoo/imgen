@@ -342,6 +342,13 @@ function App() {
       if (key.name === "escape" || key.name === "return") return setReading(false);
       if (key.name === "j" || key.name === "down") return void reader.current?.scrollBy(2);
       if (key.name === "k" || key.name === "up") return void reader.current?.scrollBy(-2);
+      // c copies what you are looking at, which in here is the text rather than the picture.
+      if (key.name === "c" && selected?.prompt) {
+        void copyTextToClipboard(selected.prompt)
+          .then(() => setStatus({ kind: "note", text: "prompt copied to clipboard", tone: "ok" }))
+          .catch((e: Error) => setStatus({ kind: "note", text: e.message, tone: "error" }));
+        return;
+      }
     }
 
     switch (key.name) {
@@ -504,7 +511,7 @@ function App() {
               and cannot be settled from here. Splitting the pane looks the same everywhere. */}
           {reading && selected?.prompt ? (
             <box height={READER_ROWS} border borderColor={ACCENT} flexDirection="column">
-              <text fg={ACCENT}>prompt — j/k scroll · enter or esc closes</text>
+              <text fg={ACCENT}>prompt — j/k scroll · c copies it · enter or esc closes</text>
               <scrollbox ref={reader} flexGrow={1}>
                 <text fg={MUTED}>{selected.prompt}</text>
               </scrollbox>
@@ -559,8 +566,10 @@ function App() {
           </box>
         ) : null}
         <text fg={MUTED}>
-          i prompt · enter read prompt · / filter · j/k move · f fullscreen · ⌘V/v attach ref ·
-          c copy · p copy path · s save · o open · r reroll · q quit
+          {/* No ⌘V here: it is a paste gesture, not a key this app binds, and the capital reads
+              as another uppercase binding. README documents it; v does the same thing. */}
+          i prompt · enter read prompt · / filter · j/k move · f fullscreen · v attach ref ·
+          x drop refs · c copy · p copy path · s save · o open · r reroll · q quit
         </text>
       </box>
     </box>

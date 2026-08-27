@@ -1,10 +1,21 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const TIMEOUT_MS = 3 * 60 * 1000;
+const CANCEL_GRACE_MS = 1_000;
 const OUTPUT_FILE = "prompt.txt";
+
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) return;
+  const target = process.platform === "win32" ? pid : -pid;
+  try {
+    process.kill(target, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
 
 /**
  * Art direction the model would otherwise leave to chance, plus whatever standing taste the
@@ -46,6 +57,7 @@ export interface EnhanceRun {
 /** Rewrites a draft prompt through a Codex turn; the caller keeps the handle so esc can stop it. */
 export function enhance(draft: string, style: string | null): EnhanceRun {
   const cwd = mkdtempSync(join(tmpdir(), "imgen-enhance-"));
+  const cleanup = () => rmSync(cwd, { recursive: true, force: true });
   const child = spawn(
     "codex",
     [
@@ -55,34 +67,48 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
       'sandbox_mode="workspace-write"',
       enhanceInstruction(draft, style),
     ],
-    { cwd, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );
 
   let cancelled = false;
+  let cancellationTimer: ReturnType<typeof setTimeout> | null = null;
   child.stdout?.resume();
   child.stderr?.resume();
 
   const timer = setTimeout(() => {
     cancelled = true;
-    child.kill("SIGKILL");
+    signalProcessGroup(child.pid, "SIGKILL");
   }, TIMEOUT_MS);
+  const clearTimers = () => {
+    clearTimeout(timer);
+    if (!cancelled && cancellationTimer !== null) {
+      clearTimeout(cancellationTimer);
+      cancellationTimer = null;
+    }
+  };
 
   const done = new Promise<string>((resolve, reject) => {
     child.on("error", (error) =>
-      reject(
-        (error as { code?: string }).code === "ENOENT"
-          ? new Error("codex is not installed")
-          : error,
-      ),
+      {
+        clearTimers();
+        cleanup();
+        reject(
+          (error as { code?: string }).code === "ENOENT"
+            ? new Error("codex is not installed")
+            : error,
+        );
+      },
     );
     child.on("close", () => {
-      clearTimeout(timer);
-      if (cancelled) return reject(new Error("cancelled"));
+      clearTimers();
       try {
+        if (cancelled) return reject(new Error("cancelled"));
         const text = readFileSync(join(cwd, OUTPUT_FILE), "utf8").trim();
         return text ? resolve(text) : reject(new Error("the rewrite came back empty"));
       } catch {
         reject(new Error("codex produced no rewritten prompt"));
+      } finally {
+        cleanup();
       }
     });
   });
@@ -90,9 +116,13 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
   return {
     done,
     cancel: () => {
+      if (cancelled) return;
       cancelled = true;
-      clearTimeout(timer);
-      child.kill("SIGTERM");
+      signalProcessGroup(child.pid, "SIGTERM");
+      cancellationTimer = setTimeout(() => {
+        cancellationTimer = null;
+        signalProcessGroup(child.pid, "SIGKILL");
+      }, CANCEL_GRACE_MS);
     },
   };
 }

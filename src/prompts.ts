@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
 import { CONFIG_PATH } from "./config.ts";
@@ -20,11 +21,18 @@ export const PROMPTS_PATH = join(dirname(CONFIG_PATH), "prompts.json");
 
 export interface PromptRecord {
   prompt: string;
+  /** References that were attached to the same generation, in their original order. */
+  references?: string[];
   /** Epoch ms, so a future cleanup can drop records for images that no longer exist. */
   at: number;
 }
 
 export type PromptIndex = Record<string, PromptRecord>;
+
+export interface GenerationProvenance {
+  prompt: string;
+  references?: string[];
+}
 
 export function loadPrompts(path: string = PROMPTS_PATH): PromptIndex {
   if (!existsSync(path)) return {};
@@ -44,14 +52,26 @@ export function loadPrompts(path: string = PROMPTS_PATH): PromptIndex {
 /** Attributes one run's prompt to every image it produced; a run can emit several. */
 export function recordPrompt(
   paths: string[],
-  prompt: string,
+  provenance: string | GenerationProvenance,
   path: string = PROMPTS_PATH,
 ): PromptIndex {
   const index = loadPrompts(path);
   const at = Date.now();
-  for (const image of paths) index[image] = { prompt, at };
+  const record =
+    typeof provenance === "string"
+      ? { prompt: provenance, references: [] }
+      : { prompt: provenance.prompt, references: provenance.references ?? [] };
+  for (const image of paths) index[image] = { ...record, at };
 
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(index, null, 2)}\n`);
+  const temporary = join(dirname(path), `.${randomUUID()}.tmp`);
+  const mode = existsSync(path) ? statSync(path).mode & 0o777 : 0o600;
+  try {
+    writeFileSync(temporary, `${JSON.stringify(index, null, 2)}\n`, { mode });
+    chmodSync(temporary, mode);
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
   return index;
 }

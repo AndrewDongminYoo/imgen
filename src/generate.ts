@@ -1,9 +1,21 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { newSince, type Shot, snapshot } from "./library.ts";
+
+const CANCEL_GRACE_MS = 1_000;
+
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) return;
+  const target = process.platform === "win32" ? pid : -pid;
+  try {
+    process.kill(target, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
 
 /**
  * There is no `codex imagegen` subcommand — the image tool only runs inside an agent turn, so a
@@ -43,6 +55,7 @@ export interface GenerateOptions {
 export function generate(description: string, options: GenerateOptions = {}): Run {
   const before = snapshot();
   const cwd = mkdtempSync(join(tmpdir(), "imgen-"));
+  const cleanup = () => rmSync(cwd, { recursive: true, force: true });
 
   const references = options.references ?? [];
   const child = spawn(
@@ -55,10 +68,16 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
       ...references.flatMap((path) => ["-i", path]),
       buildPrompt(description, references),
     ],
-    { cwd, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );
 
   let cancelled = false;
+  let cancellationTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearCancellationTimer = () => {
+    if (cancellationTimer === null) return;
+    clearTimeout(cancellationTimer);
+    cancellationTimer = null;
+  };
   let stderr = "";
   child.stderr?.on("data", (chunk: Buffer) => {
     stderr += chunk.toString();
@@ -79,23 +98,39 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
   child.stdout?.resume();
 
   const done = new Promise<Shot[]>((resolve, reject) => {
-    child.on("error", reject);
+    child.on("error", (error) => {
+      if (!cancelled) clearCancellationTimer();
+      cleanup();
+      reject(error);
+    });
     child.on("close", (code) => {
-      if (cancelled) return reject(new Error("cancelled"));
+      if (!cancelled) clearCancellationTimer();
+      try {
+        if (cancelled) return reject(new Error("cancelled"));
 
-      const produced = newSince(before);
-      if (produced.length > 0) return resolve(produced);
+        const produced = newSince(before);
+        if (produced.length > 0) return resolve(produced);
 
-      const tail = stderr.trim().split("\n").slice(-3).join("\n");
-      reject(new Error(`codex exited ${code} without producing an image${tail ? `\n${tail}` : ""}`));
+        const tail = stderr.trim().split("\n").slice(-3).join("\n");
+        reject(new Error(`codex exited ${code} without producing an image${tail ? `\n${tail}` : ""}`));
+      } catch (error) {
+        reject(error);
+      } finally {
+        cleanup();
+      }
     });
   });
 
   return {
     done,
     cancel: () => {
+      if (cancelled) return;
       cancelled = true;
-      child.kill("SIGTERM");
+      signalProcessGroup(child.pid, "SIGTERM");
+      cancellationTimer = setTimeout(() => {
+        cancellationTimer = null;
+        signalProcessGroup(child.pid, "SIGKILL");
+      }, CANCEL_GRACE_MS);
     },
   };
 }

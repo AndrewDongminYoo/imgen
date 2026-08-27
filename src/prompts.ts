@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
@@ -65,8 +65,10 @@ export function recordPrompt(
 
   mkdirSync(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${randomUUID()}.tmp`);
+  const mode = existsSync(path) ? statSync(path).mode & 0o777 : 0o600;
   try {
-    writeFileSync(temporary, `${JSON.stringify(index, null, 2)}\n`);
+    writeFileSync(temporary, `${JSON.stringify(index, null, 2)}\n`, { mode });
+    chmodSync(temporary, mode);
     renameSync(temporary, path);
   } finally {
     rmSync(temporary, { force: true });

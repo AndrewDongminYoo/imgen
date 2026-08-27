@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -289,6 +290,24 @@ test("recordPrompt keeps the reference images that informed a generation", () =>
   const stored = loadPrompts(index);
   expect(stored["/lib/a.png"]?.prompt).toBe("a red fox");
   expect(stored["/lib/a.png"]?.references).toEqual(["/attachments/fox.png"]);
+});
+
+test("recordPrompt preserves the existing prompt storage mode", () => {
+  const index = fakeIndexPath();
+  writeFileSync(index, "{}", { mode: 0o600 });
+  chmodSync(index, 0o600);
+
+  recordPrompt(["/lib/a.png"], "a red fox", index);
+
+  expect(statSync(index).mode & 0o777).toBe(0o600);
+});
+
+test("recordPrompt creates private prompt storage", () => {
+  const index = fakeIndexPath();
+
+  recordPrompt(["/lib/a.png"], "a red fox", index);
+
+  expect(statSync(index).mode & 0o777).toBe(0o600);
 });
 
 test("loadPrompts keeps legacy records that have no references", () => {

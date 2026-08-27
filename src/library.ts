@@ -44,13 +44,14 @@ export function listShots(root: string = LIBRARY, prompts: PromptIndex = loadPro
       const stat = statSync(path, { throwIfNoEntry: false });
       if (!stat) continue;
       const provenance = prompts[path];
+      const references = provenance?.references;
       shots.push({
         path,
         session,
         createdAt: stat.mtimeMs,
         bytes: stat.size,
         prompt: provenance?.prompt,
-        references: provenance?.references,
+        references: Array.isArray(references) ? references : [],
       });
     }
   }

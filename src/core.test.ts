@@ -109,6 +109,27 @@ async function waitForFile(path: string): Promise<void> {
   throw new Error(`Timed out waiting for ${path}`);
 }
 
+async function waitForProcessExit(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+      throw error;
+    }
+    await Bun.sleep(10);
+  }
+  throw new Error(`Timed out waiting for process ${pid} to exit`);
+}
+
+function killTestProcess(pid: number): void {
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
 test("saveImage keeps an existing file and adds a suffix to the new image", async () => {
   const { saveImage } = await import("./save.ts");
   const sourceDir = mkdtempSync(join(tmpdir(), "imgen-source-"));
@@ -148,20 +169,28 @@ test("generate removes its temporary workspace after cancellation", async () => 
   });
 });
 
-test("generate force stops a child that ignores cancellation", async () => {
+test("generate stops descendants when cancellation escalates", async () => {
   await withFakeCodex(
-    "trap '' TERM\n(sleep 2; kill -KILL $$) </dev/null >/dev/null 2>&1 &\nwhile :; do :; done",
+    "trap '' TERM\n(trap '' TERM\nsleep 30) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$IMGEN_TEST_CWD_LOG.background\"\nwhile :; do :; done",
     async (cwdLog) => {
       const { generate } = await import("./generate.ts");
       const run = generate("a red fox");
       await waitForFile(cwdLog);
+      const backgroundPidPath = `${cwdLog}.background`;
+      await waitForFile(backgroundPidPath);
+      const backgroundPid = Number(readFileSync(backgroundPidPath, "utf8"));
 
-      const started = Date.now();
-      run.cancel();
+      try {
+        const started = Date.now();
+        run.cancel();
 
-      await expect(run.done).rejects.toThrow("cancelled");
-      expect(Date.now() - started).toBeLessThan(1_500);
-      expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+        await expect(run.done).rejects.toThrow("cancelled");
+        expect(Date.now() - started).toBeLessThan(1_500);
+        await waitForProcessExit(backgroundPid);
+        expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+      } finally {
+        killTestProcess(backgroundPid);
+      }
     },
   );
 });
@@ -208,20 +237,28 @@ test("enhance removes its temporary workspace after cancellation", async () => {
   });
 });
 
-test("enhance force stops a child that ignores cancellation", async () => {
+test("enhance stops descendants when cancellation escalates", async () => {
   await withFakeCodex(
-    "trap '' TERM\n(sleep 2; kill -KILL $$) </dev/null >/dev/null 2>&1 &\nwhile :; do :; done",
+    "trap '' TERM\n(trap '' TERM\nsleep 30) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$IMGEN_TEST_CWD_LOG.background\"\nwhile :; do :; done",
     async (cwdLog) => {
       const { enhance } = await import("./enhance.ts");
       const run = enhance("a red fox", null);
       await waitForFile(cwdLog);
+      const backgroundPidPath = `${cwdLog}.background`;
+      await waitForFile(backgroundPidPath);
+      const backgroundPid = Number(readFileSync(backgroundPidPath, "utf8"));
 
-      const started = Date.now();
-      run.cancel();
+      try {
+        const started = Date.now();
+        run.cancel();
 
-      await expect(run.done).rejects.toThrow("cancelled");
-      expect(Date.now() - started).toBeLessThan(1_500);
-      expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+        await expect(run.done).rejects.toThrow("cancelled");
+        expect(Date.now() - started).toBeLessThan(1_500);
+        await waitForProcessExit(backgroundPid);
+        expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+      } finally {
+        killTestProcess(backgroundPid);
+      }
     },
   );
 });

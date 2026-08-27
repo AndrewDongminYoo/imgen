@@ -7,6 +7,16 @@ const TIMEOUT_MS = 3 * 60 * 1000;
 const CANCEL_GRACE_MS = 1_000;
 const OUTPUT_FILE = "prompt.txt";
 
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) return;
+  const target = process.platform === "win32" ? pid : -pid;
+  try {
+    process.kill(target, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
 /**
  * Art direction the model would otherwise leave to chance, plus whatever standing taste the
  * config carries. Deliberately general — the subject stays the user's, only the direction is
@@ -57,7 +67,7 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
       'sandbox_mode="workspace-write"',
       enhanceInstruction(draft, style),
     ],
-    { cwd, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );
 
   let cancelled = false;
@@ -67,7 +77,7 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
 
   const timer = setTimeout(() => {
     cancelled = true;
-    child.kill("SIGKILL");
+    signalProcessGroup(child.pid, "SIGKILL");
   }, TIMEOUT_MS);
   const clearTimers = () => {
     clearTimeout(timer);
@@ -107,9 +117,9 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
-      child.kill("SIGTERM");
+      signalProcessGroup(child.pid, "SIGTERM");
       cancellationTimer = setTimeout(
-        () => child.kill("SIGKILL"),
+        () => signalProcessGroup(child.pid, "SIGKILL"),
         CANCEL_GRACE_MS,
       );
     },

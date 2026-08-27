@@ -7,6 +7,16 @@ import { newSince, type Shot, snapshot } from "./library.ts";
 
 const CANCEL_GRACE_MS = 1_000;
 
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (pid === undefined) return;
+  const target = process.platform === "win32" ? pid : -pid;
+  try {
+    process.kill(target, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
 /**
  * There is no `codex imagegen` subcommand — the image tool only runs inside an agent turn, so a
  * generation is a headless `codex exec` whose prompt asks for exactly one thing and nothing else.
@@ -58,7 +68,7 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
       ...references.flatMap((path) => ["-i", path]),
       buildPrompt(description, references),
     ],
-    { cwd, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );
 
   let cancelled = false;
@@ -116,9 +126,9 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
-      child.kill("SIGTERM");
+      signalProcessGroup(child.pid, "SIGTERM");
       cancellationTimer = setTimeout(
-        () => child.kill("SIGKILL"),
+        () => signalProcessGroup(child.pid, "SIGKILL"),
         CANCEL_GRACE_MS,
       );
     },

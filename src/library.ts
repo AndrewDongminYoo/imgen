@@ -45,13 +45,14 @@ export function listShots(root: string = LIBRARY, prompts: PromptIndex = loadPro
       if (!stat) continue;
       const provenance = prompts[path];
       const references = provenance?.references;
+      const hasOnlyStringReferences = Array.isArray(references) && references.every((reference) => typeof reference === "string");
       shots.push({
         path,
         session,
         createdAt: stat.mtimeMs,
         bytes: stat.size,
         prompt: provenance?.prompt,
-        references: Array.isArray(references) ? references : [],
+        references: hasOnlyStringReferences ? references : [],
       });
     }
   }

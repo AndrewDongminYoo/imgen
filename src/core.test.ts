@@ -375,6 +375,20 @@ test("listShots normalizes invalid persisted references before reroll", () => {
   expect(shot?.references).toEqual([]);
 });
 
+test("listShots normalizes persisted references that contain non-strings before reroll", () => {
+  const root = fakeLibrary();
+  const mine = addShot(root, "s1", "exec-mine.png");
+  const index = fakeIndexPath();
+  writeFileSync(
+    index,
+    JSON.stringify({ [mine]: { prompt: "a red fox", at: 1, references: [null] } }),
+  );
+
+  const shot = listShots(root, loadPrompts(index)).find((candidate) => candidate.path === mine);
+
+  expect(shot?.references).toEqual([]);
+});
+
 test("filterShots matches the prompt case-insensitively and drops the unlabelled", () => {
   const shots = [
     { path: "/a.png", session: "s", createdAt: 3, bytes: 1, prompt: "A Red Fox on a bicycle" },

@@ -14,6 +14,8 @@ export interface Shot {
   bytes: number;
   /** What imgen was asked for, when imgen is what made it. Absent for everything older. */
   prompt?: string;
+  /** References sent with imgen's generation, when provenance is available. */
+  references?: string[];
 }
 
 /** Every generated image, newest first. */
@@ -41,12 +43,14 @@ export function listShots(root: string = LIBRARY, prompts: PromptIndex = loadPro
       const path = join(root, session, file);
       const stat = statSync(path, { throwIfNoEntry: false });
       if (!stat) continue;
+      const provenance = prompts[path];
       shots.push({
         path,
         session,
         createdAt: stat.mtimeMs,
         bytes: stat.size,
-        prompt: prompts[path]?.prompt,
+        prompt: provenance?.prompt,
+        references: provenance?.references,
       });
     }
   }

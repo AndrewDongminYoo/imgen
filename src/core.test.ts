@@ -1,12 +1,20 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 import { expect, test } from "bun:test";
 
 import { enhanceInstruction } from "./enhance.ts";
 import { buildPrompt } from "./generate.ts";
 import { filterShots, listShots, newSince, snapshot } from "./library.ts";
-import { loadPrompts, recordPrompt } from "./prompts.ts";
+import { loadPrompts, recordPrompt, type PromptIndex } from "./prompts.ts";
 
 function fakeLibrary(): string {
   return mkdtempSync(join(tmpdir(), "imgen-lib-"));
@@ -66,6 +74,158 @@ function fakeIndexPath(): string {
   return join(mkdtempSync(join(tmpdir(), "imgen-prompts-")), "prompts.json");
 }
 
+function fakeCodex(body: string): { bin: string; cwdLog: string } {
+  const bin = mkdtempSync(join(tmpdir(), "imgen-codex-bin-"));
+  const cwdLog = join(bin, "cwd.log");
+  const executable = join(bin, "codex");
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nprintf '%s' "$PWD" > "$IMGEN_TEST_CWD_LOG"\n${body}\n`,
+  );
+  chmodSync(executable, 0o755);
+  return { bin, cwdLog };
+}
+
+async function withFakeCodex<T>(body: string, run: (cwdLog: string) => Promise<T>): Promise<T> {
+  const { bin, cwdLog } = fakeCodex(body);
+  const originalPath = process.env.PATH;
+  const originalCwdLog = process.env.IMGEN_TEST_CWD_LOG;
+  process.env.PATH = `${bin}${delimiter}${originalPath ?? ""}`;
+  process.env.IMGEN_TEST_CWD_LOG = cwdLog;
+  try {
+    return await run(cwdLog);
+  } finally {
+    process.env.PATH = originalPath;
+    if (originalCwdLog === undefined) delete process.env.IMGEN_TEST_CWD_LOG;
+    else process.env.IMGEN_TEST_CWD_LOG = originalCwdLog;
+  }
+}
+
+async function waitForFile(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (existsSync(path)) return;
+    await Bun.sleep(10);
+  }
+  throw new Error(`Timed out waiting for ${path}`);
+}
+
+test("saveImage keeps an existing file and adds a suffix to the new image", async () => {
+  const { saveImage } = await import("./save.ts");
+  const sourceDir = mkdtempSync(join(tmpdir(), "imgen-source-"));
+  const destinationDir = mkdtempSync(join(tmpdir(), "imgen-destination-"));
+  const source = join(sourceDir, "exec-image.png");
+  const existing = join(destinationDir, "exec-image.png");
+  writeFileSync(source, "new image");
+  writeFileSync(existing, "existing image");
+
+  const saved = saveImage(source, destinationDir);
+
+  expect(basename(saved)).toBe("exec-image-1.png");
+  expect(readFileSync(saved, "utf8")).toBe("new image");
+  expect(readFileSync(existing, "utf8")).toBe("existing image");
+});
+
+test("generate removes its temporary workspace when Codex exits without an image", async () => {
+  await withFakeCodex("exit 0", async (cwdLog) => {
+    const { generate } = await import("./generate.ts");
+
+    await expect(generate("a red fox").done).rejects.toThrow("codex exited 0 without producing an image");
+
+    expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+  });
+});
+
+test("generate removes its temporary workspace after cancellation", async () => {
+  await withFakeCodex("while :; do :; done", async (cwdLog) => {
+    const { generate } = await import("./generate.ts");
+    const run = generate("a red fox");
+    await waitForFile(cwdLog);
+
+    run.cancel();
+
+    await expect(run.done).rejects.toThrow("cancelled");
+    expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+  });
+});
+
+test("generate force stops a child that ignores cancellation", async () => {
+  await withFakeCodex(
+    "trap '' TERM\n(sleep 2; kill -KILL $$) </dev/null >/dev/null 2>&1 &\nwhile :; do :; done",
+    async (cwdLog) => {
+      const { generate } = await import("./generate.ts");
+      const run = generate("a red fox");
+      await waitForFile(cwdLog);
+
+      const started = Date.now();
+      run.cancel();
+
+      await expect(run.done).rejects.toThrow("cancelled");
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+    },
+  );
+});
+
+test("generate removes its temporary workspace when Codex cannot start", async () => {
+  const root = mkdtempSync(join(tmpdir(), "imgen-no-codex-"));
+  const originalPath = process.env.PATH;
+  const originalTmpdir = process.env.TMPDIR;
+  process.env.PATH = join(root, "missing-bin");
+  process.env.TMPDIR = root;
+  try {
+    const { generate } = await import("./generate.ts");
+
+    await expect(generate("a red fox").done).rejects.toThrow();
+
+    expect(readdirSync(root)).toEqual([]);
+  } finally {
+    process.env.PATH = originalPath;
+    if (originalTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = originalTmpdir;
+  }
+});
+
+test("enhance removes its temporary workspace when Codex produces no prompt", async () => {
+  await withFakeCodex("exit 0", async (cwdLog) => {
+    const { enhance } = await import("./enhance.ts");
+
+    await expect(enhance("a red fox", null).done).rejects.toThrow("codex produced no rewritten prompt");
+
+    expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+  });
+});
+
+test("enhance removes its temporary workspace after cancellation", async () => {
+  await withFakeCodex("while :; do :; done", async (cwdLog) => {
+    const { enhance } = await import("./enhance.ts");
+    const run = enhance("a red fox", null);
+    await waitForFile(cwdLog);
+
+    run.cancel();
+
+    await expect(run.done).rejects.toThrow("cancelled");
+    expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+  });
+});
+
+test("enhance force stops a child that ignores cancellation", async () => {
+  await withFakeCodex(
+    "trap '' TERM\n(sleep 2; kill -KILL $$) </dev/null >/dev/null 2>&1 &\nwhile :; do :; done",
+    async (cwdLog) => {
+      const { enhance } = await import("./enhance.ts");
+      const run = enhance("a red fox", null);
+      await waitForFile(cwdLog);
+
+      const started = Date.now();
+      run.cancel();
+
+      await expect(run.done).rejects.toThrow("cancelled");
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+    },
+  );
+});
+
 test("recordPrompt survives a round trip and keeps what earlier runs wrote", () => {
   const index = fakeIndexPath();
   expect(loadPrompts(index)).toEqual({});
@@ -79,6 +239,29 @@ test("recordPrompt survives a round trip and keeps what earlier runs wrote", () 
   expect(stored["/lib/a.png"]?.prompt).toBe("a red fox");
   expect(stored["/lib/b.png"]?.prompt).toBe("a red fox");
   expect(stored["/lib/c.png"]?.prompt).toBe("a blue heron");
+});
+
+test("recordPrompt keeps the reference images that informed a generation", () => {
+  const index = fakeIndexPath();
+
+  recordPrompt(["/lib/a.png"], {
+    prompt: "a red fox",
+    references: ["/attachments/fox.png"],
+  }, index);
+
+  const stored = loadPrompts(index);
+  expect(stored["/lib/a.png"]?.prompt).toBe("a red fox");
+  expect(stored["/lib/a.png"]?.references).toEqual(["/attachments/fox.png"]);
+});
+
+test("loadPrompts keeps legacy records that have no references", () => {
+  const index = fakeIndexPath();
+  writeFileSync(
+    index,
+    JSON.stringify({ "/lib/a.png": { prompt: "a red fox", at: 1 } }),
+  );
+
+  expect(loadPrompts(index)).toEqual({ "/lib/a.png": { prompt: "a red fox", at: 1 } });
 });
 
 test("a corrupt index reads as empty rather than stopping the app", () => {
@@ -104,6 +287,22 @@ test("listShots carries the recorded prompt, and nothing for images it never mad
   // The 197 images Codex made before imgen existed have no prompt and must still list.
   expect(shots.find((s) => s.path !== mine)?.prompt).toBeUndefined();
   expect(shots).toHaveLength(2);
+});
+
+test("listShots carries the reference images recorded for an image", () => {
+  const root = fakeLibrary();
+  const mine = addShot(root, "s1", "exec-mine.png");
+  const prompts = {
+    [mine]: {
+      prompt: "a red fox",
+      at: 1,
+      references: ["/attachments/fox.png"],
+    },
+  } as PromptIndex;
+
+  const shot = listShots(root, prompts).find((candidate) => candidate.path === mine);
+
+  expect(shot?.references).toEqual(["/attachments/fox.png"]);
 });
 
 test("filterShots matches the prompt case-insensitively and drops the unlabelled", () => {

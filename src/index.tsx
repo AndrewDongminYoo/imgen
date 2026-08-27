@@ -10,8 +10,8 @@ import {
   useTerminalDimensions,
 } from "@opentui/react";
 import { execFile } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { appendFileSync, existsSync } from "node:fs";
+import { basename } from "node:path";
 import * as React from "react";
 
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
@@ -27,6 +27,7 @@ import {
 } from "./clipboard.ts";
 import { filterShots, listShots, type Shot } from "./library.ts";
 import { recordPrompt } from "./prompts.ts";
+import { saveImage } from "./save.ts";
 
 const ACCENT = "#8B5CF6";
 const MUTED = "#9CA3AF";
@@ -157,7 +158,7 @@ function App() {
    * A second run must not start over the first: overwriting `run.current` orphans the child,
    * which keeps running and billing while `esc` reaches only the newer one.
    */
-  const start = React.useCallback((description: string): boolean => {
+  const start = React.useCallback((description: string, attachedReferences: string[] = references): boolean => {
     if (!description.trim()) return false;
     if (run.current) {
       setStatus({
@@ -173,12 +174,15 @@ function App() {
     setTicks(0);
     setActivity("");
 
-    const current = generate(description, { references, onActivity: setActivity });
+    const current = generate(description, { references: attachedReferences, onActivity: setActivity });
     run.current = current;
     current.done
       .then((produced) => {
         // Recorded before the library is re-read, so the join picks the new labels up at once.
-        recordPrompt(produced.map((shot) => shot.path), description);
+        recordPrompt(produced.map((shot) => shot.path), {
+          prompt: description,
+          references: attachedReferences,
+        });
         setShots(listShots());
         setCursor(0);
         renderer.requestRender();
@@ -233,9 +237,8 @@ function App() {
 
   const save = React.useCallback(() => {
     if (!selected) return;
-    const dest = join(process.cwd(), basename(selected.path));
     try {
-      copyFileSync(selected.path, dest);
+      const dest = saveImage(selected.path, process.cwd());
       setStatus({ kind: "note", text: `saved ${dest}`, tone: "ok" });
     } catch (error) {
       setStatus({ kind: "note", text: (error as Error).message, tone: "error" });
@@ -424,7 +427,7 @@ function App() {
         // Roll the selected image's own prompt again — "this one, differently" is what r is for
         // once the gallery knows what made each picture. Falls back to the session's last.
         const again = selected?.prompt ?? lastPrompt;
-        if (again) start(again);
+        if (again) start(again, selected?.references ?? []);
         return;
       }
       case "escape":

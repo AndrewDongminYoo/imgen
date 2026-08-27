@@ -81,9 +81,10 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
   }, TIMEOUT_MS);
   const clearTimers = () => {
     clearTimeout(timer);
-    if (cancellationTimer === null) return;
-    clearTimeout(cancellationTimer);
-    cancellationTimer = null;
+    if (!cancelled && cancellationTimer !== null) {
+      clearTimeout(cancellationTimer);
+      cancellationTimer = null;
+    }
   };
 
   const done = new Promise<string>((resolve, reject) => {
@@ -118,10 +119,10 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
       if (cancelled) return;
       cancelled = true;
       signalProcessGroup(child.pid, "SIGTERM");
-      cancellationTimer = setTimeout(
-        () => signalProcessGroup(child.pid, "SIGKILL"),
-        CANCEL_GRACE_MS,
-      );
+      cancellationTimer = setTimeout(() => {
+        cancellationTimer = null;
+        signalProcessGroup(child.pid, "SIGKILL");
+      }, CANCEL_GRACE_MS);
     },
   };
 }

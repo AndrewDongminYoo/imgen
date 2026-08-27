@@ -196,6 +196,29 @@ test("generate stops descendants when cancellation escalates", async () => {
   );
 });
 
+test("generate keeps escalation armed after the direct child exits", async () => {
+  await withFakeCodex(
+    "(trap '' TERM\nsleep 30) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$IMGEN_TEST_CWD_LOG.background\"\nwhile :; do :; done",
+    async (cwdLog) => {
+      const { generate } = await import("./generate.ts");
+      const run = generate("a red fox");
+      await waitForFile(cwdLog);
+      const backgroundPidPath = `${cwdLog}.background`;
+      await waitForFile(backgroundPidPath);
+      const backgroundPid = Number(readFileSync(backgroundPidPath, "utf8"));
+
+      try {
+        run.cancel();
+
+        await expect(run.done).rejects.toThrow("cancelled");
+        await waitForProcessExit(backgroundPid);
+      } finally {
+        killTestProcess(backgroundPid);
+      }
+    },
+  );
+});
+
 test("generate removes its temporary workspace when Codex cannot start", async () => {
   const root = mkdtempSync(join(tmpdir(), "imgen-no-codex-"));
   const originalPath = process.env.PATH;
@@ -257,6 +280,29 @@ test("enhance stops descendants when cancellation escalates", async () => {
         expect(Date.now() - started).toBeLessThan(1_500);
         await waitForProcessExit(backgroundPid);
         expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
+      } finally {
+        killTestProcess(backgroundPid);
+      }
+    },
+  );
+});
+
+test("enhance keeps escalation armed after the direct child exits", async () => {
+  await withFakeCodex(
+    "(trap '' TERM\nsleep 30) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > \"$IMGEN_TEST_CWD_LOG.background\"\nwhile :; do :; done",
+    async (cwdLog) => {
+      const { enhance } = await import("./enhance.ts");
+      const run = enhance("a red fox", null);
+      await waitForFile(cwdLog);
+      const backgroundPidPath = `${cwdLog}.background`;
+      await waitForFile(backgroundPidPath);
+      const backgroundPid = Number(readFileSync(backgroundPidPath, "utf8"));
+
+      try {
+        run.cancel();
+
+        await expect(run.done).rejects.toThrow("cancelled");
+        await waitForProcessExit(backgroundPid);
       } finally {
         killTestProcess(backgroundPid);
       }

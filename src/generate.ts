@@ -99,12 +99,12 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
 
   const done = new Promise<Shot[]>((resolve, reject) => {
     child.on("error", (error) => {
-      clearCancellationTimer();
+      if (!cancelled) clearCancellationTimer();
       cleanup();
       reject(error);
     });
     child.on("close", (code) => {
-      clearCancellationTimer();
+      if (!cancelled) clearCancellationTimer();
       try {
         if (cancelled) return reject(new Error("cancelled"));
 
@@ -127,10 +127,10 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
       if (cancelled) return;
       cancelled = true;
       signalProcessGroup(child.pid, "SIGTERM");
-      cancellationTimer = setTimeout(
-        () => signalProcessGroup(child.pid, "SIGKILL"),
-        CANCEL_GRACE_MS,
-      );
+      cancellationTimer = setTimeout(() => {
+        cancellationTimer = null;
+        signalProcessGroup(child.pid, "SIGKILL");
+      }, CANCEL_GRACE_MS);
     },
   };
 }

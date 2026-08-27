@@ -16,6 +16,7 @@ import { enhanceInstruction } from "./enhance.ts";
 import { buildPrompt } from "./generate.ts";
 import { filterShots, listShots, newSince, snapshot } from "./library.ts";
 import { loadPrompts, recordPrompt, type PromptIndex } from "./prompts.ts";
+import { rerollOptions } from "./reroll.ts";
 
 function fakeLibrary(): string {
   return mkdtempSync(join(tmpdir(), "imgen-lib-"));
@@ -433,6 +434,13 @@ test("listShots normalizes persisted references that contain non-strings before 
   const shot = listShots(root, loadPrompts(index)).find((candidate) => candidate.path === mine);
 
   expect(shot?.references).toEqual([]);
+});
+
+test("reroll uses current references when the selected image has no provenance", () => {
+  expect(rerollOptions({ references: [] }, "a red fox", ["/attachments/fox.png"])).toEqual({
+    description: "a red fox",
+    references: ["/attachments/fox.png"],
+  });
 });
 
 test("filterShots matches the prompt case-insensitively and drops the unlabelled", () => {

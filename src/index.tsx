@@ -27,6 +27,7 @@ import {
 } from "./clipboard.ts";
 import { filterShots, listShots, type Shot } from "./library.ts";
 import { recordPrompt } from "./prompts.ts";
+import { rerollOptions } from "./reroll.ts";
 import { saveImage } from "./save.ts";
 
 const ACCENT = "#8B5CF6";
@@ -426,8 +427,8 @@ function App() {
       case "r": {
         // Roll the selected image's own prompt again — "this one, differently" is what r is for
         // once the gallery knows what made each picture. Falls back to the session's last.
-        const again = selected?.prompt ?? lastPrompt;
-        if (again) start(again, selected?.references ?? []);
+        const again = rerollOptions(selected, lastPrompt, references);
+        if (again.description) start(again.description, again.references);
         return;
       }
       case "escape":

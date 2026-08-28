@@ -191,12 +191,12 @@ so asking from another process's pty always comes back `blocks`.
 
 ## How a run is identified
 
-Codex writes every image under `~/.codex/generated_images/<session>/`.
-`imgen` snapshots that directory before launching and diffs it afterwards.
-
-Reading the newest file instead would be wrong twice over: one run can emit several images into a
-single session directory, and against a library of any size a run that produced nothing would hand
-back an unrelated earlier picture instead of reporting the failure.
+`imgen` asks Codex to save the final image as `out.png` in the per-run work directory.
+After Codex exits, imgen copies that file into its own image store.
+By default, the store is `~/.config/imgen/images/<run>/out.png`.
+When `XDG_CONFIG_HOME` is set, imgen uses `$XDG_CONFIG_HOME/imgen/images/` instead.
+The gallery reads this store and `~/.codex/generated_images/`.
+If `out.png` is absent, imgen reports failure instead of attributing another Codex session's image to the request.
 
 ## Development
 

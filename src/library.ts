@@ -1,11 +1,15 @@
-import { readdirSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
+import { CONFIG_PATH } from "./config.ts";
 import { loadPrompts, type PromptIndex } from "./prompts.ts";
 
 /** Codex writes every generated image here, one directory per agent session. */
 export const LIBRARY = join(homedir(), ".codex", "generated_images");
+/** imgen copies its requested outputs here, outside Codex-owned storage. */
+export const IMGEN_LIBRARY = join(dirname(CONFIG_PATH), "images");
 
 export interface Shot {
   path: string;
@@ -19,45 +23,57 @@ export interface Shot {
 }
 
 /** Every generated image, newest first. */
-export function listShots(root: string = LIBRARY, prompts: PromptIndex = loadPrompts()): Shot[] {
+export function listShots(root: string | string[] | undefined = undefined, prompts: PromptIndex = loadPrompts()): Shot[] {
   const shots: Shot[] = [];
+  const roots = root === undefined ? [IMGEN_LIBRARY, LIBRARY] : Array.isArray(root) ? root : [root];
 
-  let sessions: string[];
-  try {
-    sessions = readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch {
-    return shots; // nothing generated on this machine yet
-  }
-
-  for (const session of sessions) {
-    let files: string[];
+  for (const libraryRoot of roots) {
+    let sessions: string[];
     try {
-      files = readdirSync(join(root, session));
+      sessions = readdirSync(libraryRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
     } catch {
       continue;
     }
-    for (const file of files) {
-      if (!file.endsWith(".png")) continue;
-      const path = join(root, session, file);
-      const stat = statSync(path, { throwIfNoEntry: false });
-      if (!stat) continue;
-      const provenance = prompts[path];
-      const references = provenance?.references;
-      const hasOnlyStringReferences = Array.isArray(references) && references.every((reference) => typeof reference === "string");
-      shots.push({
-        path,
-        session,
-        createdAt: stat.mtimeMs,
-        bytes: stat.size,
-        prompt: provenance?.prompt,
-        references: hasOnlyStringReferences ? references : [],
-      });
+
+    for (const session of sessions) {
+      let files: string[];
+      try {
+        files = readdirSync(join(libraryRoot, session));
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        if (!file.endsWith(".png")) continue;
+        const path = join(libraryRoot, session, file);
+        const stat = statSync(path, { throwIfNoEntry: false });
+        if (!stat) continue;
+        const provenance = prompts[path];
+        const references = provenance?.references;
+        const hasOnlyStringReferences = Array.isArray(references) && references.every((reference) => typeof reference === "string");
+        shots.push({
+          path,
+          session,
+          createdAt: stat.mtimeMs,
+          bytes: stat.size,
+          prompt: provenance?.prompt,
+          references: hasOnlyStringReferences ? references : [],
+        });
+      }
     }
   }
 
   return shots.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function persistOutput(source: string, root: string = IMGEN_LIBRARY): Shot {
+  const session = `imgen-${randomUUID()}`;
+  const path = join(root, session, "out.png");
+  mkdirSync(dirname(path), { recursive: true });
+  copyFileSync(source, path);
+  const stat = statSync(path);
+  return { path, session, createdAt: stat.mtimeMs, bytes: stat.size, references: [] };
 }
 
 /**
@@ -70,21 +86,4 @@ export function filterShots(shots: Shot[], query: string): Shot[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return shots;
   return shots.filter((shot) => shot.prompt?.toLowerCase().includes(needle));
-}
-
-/**
- * Identifies a run's output by diffing the library around it.
- *
- * Reading the newest file instead would be wrong twice over: a single run can emit several
- * images into one session directory, and with a library this large a run that produced nothing
- * would silently hand back somebody else's earlier picture.
- */
-export function snapshot(root: string = LIBRARY): Set<string> {
-  return new Set(listShots(root).map((s) => s.path));
-}
-
-export function newSince(before: Set<string>, root: string = LIBRARY): Shot[] {
-  return listShots(root)
-    .filter((s) => !before.has(s.path))
-    .sort((a, b) => a.createdAt - b.createdAt);
 }

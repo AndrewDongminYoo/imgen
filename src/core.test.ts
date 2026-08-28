@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -14,7 +15,7 @@ import { expect, test } from "bun:test";
 
 import { enhanceInstruction } from "./enhance.ts";
 import { buildPrompt } from "./generate.ts";
-import { filterShots, listShots, newSince, snapshot } from "./library.ts";
+import { filterShots, listShots } from "./library.ts";
 import { loadPrompts, recordPrompt, type PromptIndex } from "./prompts.ts";
 import { rerollOptions } from "./reroll.ts";
 
@@ -49,27 +50,17 @@ test("listShots survives a library that does not exist", () => {
   expect(listShots(join(tmpdir(), "imgen-definitely-absent"))).toEqual([]);
 });
 
-test("newSince reports only what a run added, never a pre-existing image", () => {
-  const root = fakeLibrary();
-  addShot(root, "old-session", "exec-before.png");
+test("listShots combines imgen and Codex libraries", () => {
+  const codexRoot = fakeLibrary();
+  const imgenRoot = fakeLibrary();
+  const codexShot = addShot(codexRoot, "codex-session", "exec-codex.png");
+  const imgenShot = addShot(imgenRoot, "imgen-session", "out.png");
 
-  const before = snapshot(root);
-  expect(before.size).toBe(1);
+  const { utimesSync } = require("node:fs") as typeof import("node:fs");
+  utimesSync(codexShot, new Date(1_600_000_000_000), new Date(1_600_000_000_000));
+  utimesSync(imgenShot, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
 
-  // A single run can drop several images into one session directory.
-  const first = addShot(root, "new-session", "exec-1.png");
-  const second = addShot(root, "new-session", "exec-2.png");
-
-  const produced = newSince(before, root);
-  expect(produced.map((s) => s.path).sort()).toEqual([first, second].sort());
-});
-
-test("a run that produces nothing reports nothing rather than the newest existing image", () => {
-  const root = fakeLibrary();
-  addShot(root, "old-session", "exec-before.png");
-
-  const before = snapshot(root);
-  expect(newSince(before, root)).toEqual([]);
+  expect(listShots([codexRoot, imgenRoot]).map((shot) => shot.path)).toEqual([imgenShot, codexShot]);
 });
 
 function fakeIndexPath(): string {
@@ -156,6 +147,29 @@ test("generate removes its temporary workspace when Codex exits without an image
 
     expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
   });
+});
+
+test("generate persists each concurrent requested output", async () => {
+  const outputRoot = mkdtempSync(join(tmpdir(), "imgen-output-"));
+  await withFakeCodex(
+    'case "$*" in *"a red fox"*) printf "fox" > out.png ;; *"a blue heron"*) printf "heron" > out.png ;; esac',
+    async () => {
+      const { generate } = await import("./generate.ts");
+      try {
+        const produced = await Promise.all([
+          generate("a red fox", { outputDir: outputRoot }).done,
+          generate("a blue heron", { outputDir: outputRoot }).done,
+        ]);
+
+        expect(produced.flat().map((shot) => readFileSync(shot.path, "utf8")).sort()).toEqual([
+          "fox",
+          "heron",
+        ]);
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 test("generate removes its temporary workspace after cancellation", async () => {

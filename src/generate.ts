@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { newSince, type Shot, snapshot } from "./library.ts";
+import { persistOutput, type Shot } from "./library.ts";
 
 const CANCEL_GRACE_MS = 1_000;
+const OUTPUT_NAME = "out.png";
 
 function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): void {
   if (pid === undefined) return;
@@ -27,7 +28,7 @@ export function buildPrompt(description: string, references: string[] = []): str
     references.length > 0
       ? `Use the ${references.length} attached image${references.length === 1 ? "" : "s"} as visual reference.`
       : "",
-    "Save the final image file into the current working directory as out.png.",
+    `Save the final image file into the current working directory as ${OUTPUT_NAME}.`,
     "Do not do anything else.",
   ]
     .filter(Boolean)
@@ -43,6 +44,8 @@ export interface Run {
 export interface GenerateOptions {
   /** Reference images, passed through `codex exec -i`. */
   references?: string[];
+  /** Directory where imgen persists the requested output. */
+  outputDir?: string;
   /** Called with each line Codex prints, so the UI can show what the turn is doing. */
   onActivity?: (line: string) => void;
 }
@@ -53,7 +56,6 @@ export interface GenerateOptions {
  * appended to the prompt and the run hangs waiting for more.
  */
 export function generate(description: string, options: GenerateOptions = {}): Run {
-  const before = snapshot();
   const cwd = mkdtempSync(join(tmpdir(), "imgen-"));
   const cleanup = () => rmSync(cwd, { recursive: true, force: true });
 
@@ -108,8 +110,8 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
       try {
         if (cancelled) return reject(new Error("cancelled"));
 
-        const produced = newSince(before);
-        if (produced.length > 0) return resolve(produced);
+        const output = join(cwd, OUTPUT_NAME);
+        if (existsSync(output)) return resolve([persistOutput(output, options.outputDir)]);
 
         const tail = stderr.trim().split("\n").slice(-3).join("\n");
         reject(new Error(`codex exited ${code} without producing an image${tail ? `\n${tail}` : ""}`));

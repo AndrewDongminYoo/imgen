@@ -55,7 +55,7 @@ function configPathIsWritable(path: string): boolean {
   const symlinkTarget = danglingSymlinkTarget(path);
   if (symlinkTarget === undefined) return false;
   if (symlinkTarget !== null) {
-    if (symlinkTarget.endsWith("/") || symlinkTarget.endsWith("\\")) return false;
+    if (symlinkTarget.endsWith("/") || (process.platform === "win32" && symlinkTarget.endsWith("\\"))) return false;
     try {
       const targetDirectory = dirname(symlinkTarget);
       if (!statSync(targetDirectory).isDirectory()) return false;

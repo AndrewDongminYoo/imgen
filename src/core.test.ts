@@ -260,6 +260,29 @@ test("doctor rejects a dangling config symlink that requires a directory", async
   );
 });
 
+test("doctor accepts a dangling config symlink ending in a backslash on POSIX", async () => {
+  if (process.platform === "win32") return;
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const targetPath = join(directory, "target\\");
+      symlinkSync("target\\", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: true,
+        detail: configPath,
+      });
+      writeFileSync(configPath, "{}");
+      expect(readFileSync(targetPath, "utf8")).toBe("{}");
+    },
+  );
+});
+
 test("doctor rejects a chained config symlink without a writable final target directory", async () => {
   await withFakeCodex(
     'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',

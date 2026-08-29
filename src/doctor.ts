@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { accessSync, constants, readlinkSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 
 import { CONFIG_PATH } from "./config.ts";
 
@@ -32,7 +32,8 @@ function danglingSymlinkTarget(path: string): string | null | undefined {
   let followed = false;
   while (true) {
     try {
-      target = resolve(dirname(target), readlinkSync(target));
+      const link = readlinkSync(target);
+      target = isAbsolute(link) ? link : `${dirname(target)}/${link}`;
       followed = true;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;

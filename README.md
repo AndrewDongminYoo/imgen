@@ -31,6 +31,16 @@ enabled — `codex features list` should show `image_generation stable true`.
 imgen
 ```
 
+## Diagnose
+
+Run `imgen doctor` to check the Codex CLI, the `image_generation` feature, and the configuration path.
+It does not change the configuration path.
+
+```bash
+imgen doctor
+imgen doctor --json
+```
+
 | Key        | Action                                                     |
 | ---------- | ---------------------------------------------------------- |
 | `i`        | focus the prompt; `enter` generates                        |

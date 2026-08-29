@@ -17,6 +17,7 @@ import * as React from "react";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 
 import { loadConfig } from "./config.ts";
+import { runDoctor } from "./doctor.ts";
 import { enhance, type EnhanceRun } from "./enhance.ts";
 import { generate, type Run } from "./generate.ts";
 import {
@@ -599,5 +600,15 @@ if (process.argv.includes("--version")) {
   process.exit(0);
 }
 
-const renderer = await createCliRenderer();
-createRoot(renderer).render(<App />);
+if (process.argv[2] === "doctor") {
+  const report = runDoctor();
+  process.stdout.write(
+    process.argv.includes("--json")
+      ? `${JSON.stringify(report, null, 2)}\n`
+      : `imgen doctor\n${report.checks.map((check) => `${check.ok ? "✓" : "✗"} ${check.name}: ${check.detail}`).join("\n")}\n`,
+  );
+  process.exitCode = report.ok ? 0 : 1;
+} else {
+  const renderer = await createCliRenderer();
+  createRoot(renderer).render(<App />);
+}

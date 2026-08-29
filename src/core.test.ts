@@ -7,6 +7,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,6 +94,216 @@ async function withFakeCodex<T>(body: string, run: (cwdLog: string) => Promise<T
     else process.env.IMGEN_TEST_CWD_LOG = originalCwdLog;
   }
 }
+
+test("doctor reports the installed Codex, enabled image generation, and a usable config path", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const { runDoctor } = await import("./doctor.ts");
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+      expect(runDoctor(configPath)).toEqual({
+        ok: true,
+        checks: [
+          { name: "Codex CLI", ok: true, detail: "codex-cli test 1.0.0" },
+          { name: "image_generation", ok: true, detail: "stable" },
+          { name: "Config path", ok: true, detail: configPath },
+        ],
+      });
+    },
+  );
+});
+
+test("doctor reports a disabled image generation feature", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable false\\n" ;; esac',
+    async () => {
+      const { runDoctor } = await import("./doctor.ts");
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+      expect(runDoctor(configPath)).toEqual({
+        ok: false,
+        checks: [
+          { name: "Codex CLI", ok: true, detail: "codex-cli test 1.0.0" },
+          { name: "image_generation", ok: false, detail: "disabled" },
+          { name: "Config path", ok: true, detail: configPath },
+        ],
+      });
+    },
+  );
+});
+
+test("doctor reports every failed check when Codex is unavailable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "imgen-doctor-no-codex-"));
+  const originalPath = process.env.PATH;
+  process.env.PATH = join(root, "missing-bin");
+  try {
+    const { runDoctor } = await import("./doctor.ts");
+    const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+    expect(runDoctor(configPath)).toEqual({
+      ok: false,
+      checks: [
+        { name: "Codex CLI", ok: false, detail: "not installed" },
+        { name: "image_generation", ok: false, detail: "not checked" },
+        { name: "Config path", ok: true, detail: configPath },
+      ],
+    });
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
+test("doctor rejects an existing config file without write access", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "config.json");
+      writeFileSync(configPath, "{}");
+      chmodSync(configPath, 0o400);
+      try {
+        const { runDoctor } = await import("./doctor.ts");
+        const report = runDoctor(configPath);
+
+        expect(report.ok).toBe(false);
+        expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+          name: "Config path",
+          ok: false,
+          detail: configPath,
+        });
+      } finally {
+        chmodSync(configPath, 0o600);
+      }
+    },
+  );
+});
+
+test("doctor accepts a dangling config symlink when its target can be created", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const targetPath = join(directory, "target.json");
+      symlinkSync("target.json", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: true,
+        detail: configPath,
+      });
+      writeFileSync(configPath, "{}");
+      expect(readFileSync(targetPath, "utf8")).toBe("{}");
+    },
+  );
+});
+
+test("doctor rejects a dangling config symlink without a writable target directory", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      symlinkSync("missing/target.json", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
+
+test("doctor preserves unresolved dangling symlink target components", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      symlinkSync("missing/../target.json", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
+
+test("doctor rejects a dangling config symlink that requires a directory", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      symlinkSync("missing/", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
+
+test("doctor accepts a dangling config symlink ending in a backslash on POSIX", async () => {
+  if (process.platform === "win32") return;
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const targetPath = join(directory, "target\\");
+      symlinkSync("target\\", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: true,
+        detail: configPath,
+      });
+      writeFileSync(configPath, "{}");
+      expect(readFileSync(targetPath, "utf8")).toBe("{}");
+    },
+  );
+});
+
+test("doctor rejects a chained config symlink without a writable final target directory", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const firstTarget = join(directory, "first-target.json");
+      symlinkSync("first-target.json", configPath);
+      symlinkSync("missing/target.json", firstTarget);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
 
 async function waitForFile(path: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {

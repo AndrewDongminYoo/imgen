@@ -94,6 +94,65 @@ async function withFakeCodex<T>(body: string, run: (cwdLog: string) => Promise<T
   }
 }
 
+test("doctor reports the installed Codex, enabled image generation, and a usable config path", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const { runDoctor } = await import("./doctor.ts");
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+      expect(runDoctor(configPath)).toEqual({
+        ok: true,
+        checks: [
+          { name: "Codex CLI", ok: true, detail: "codex-cli test 1.0.0" },
+          { name: "image_generation", ok: true, detail: "stable" },
+          { name: "Config path", ok: true, detail: configPath },
+        ],
+      });
+    },
+  );
+});
+
+test("doctor reports a disabled image generation feature", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable false\\n" ;; esac',
+    async () => {
+      const { runDoctor } = await import("./doctor.ts");
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+      expect(runDoctor(configPath)).toEqual({
+        ok: false,
+        checks: [
+          { name: "Codex CLI", ok: true, detail: "codex-cli test 1.0.0" },
+          { name: "image_generation", ok: false, detail: "disabled" },
+          { name: "Config path", ok: true, detail: configPath },
+        ],
+      });
+    },
+  );
+});
+
+test("doctor reports every failed check when Codex is unavailable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "imgen-doctor-no-codex-"));
+  const originalPath = process.env.PATH;
+  process.env.PATH = join(root, "missing-bin");
+  try {
+    const { runDoctor } = await import("./doctor.ts");
+    const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+
+    expect(runDoctor(configPath)).toEqual({
+      ok: false,
+      checks: [
+        { name: "Codex CLI", ok: false, detail: "not installed" },
+        { name: "image_generation", ok: false, detail: "not checked" },
+        { name: "Config path", ok: true, detail: configPath },
+      ],
+    });
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
 async function waitForFile(path: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (existsSync(path)) return;

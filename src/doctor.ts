@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, statSync } from "node:fs";
-import { dirname } from "node:path";
+import { accessSync, constants, readlinkSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import { CONFIG_PATH } from "./config.ts";
 
@@ -27,6 +27,21 @@ function runCodex(args: string[]): { ok: boolean; output: string } {
   return { ok: true, output: result.stdout.trim() };
 }
 
+function danglingSymlinkTarget(path: string): string | null | undefined {
+  let target = path;
+  let followed = false;
+  while (true) {
+    try {
+      target = resolve(dirname(target), readlinkSync(target));
+      followed = true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return followed ? target : null;
+      return undefined;
+    }
+  }
+}
+
 function configPathIsWritable(path: string): boolean {
   try {
     if (!statSync(path).isFile()) return false;
@@ -34,6 +49,19 @@ function configPathIsWritable(path: string): boolean {
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+  }
+
+  const symlinkTarget = danglingSymlinkTarget(path);
+  if (symlinkTarget === undefined) return false;
+  if (symlinkTarget !== null) {
+    try {
+      const targetDirectory = dirname(symlinkTarget);
+      if (!statSync(targetDirectory).isDirectory()) return false;
+      accessSync(targetDirectory, constants.W_OK | constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   let directory = dirname(path);

@@ -200,6 +200,48 @@ test("doctor accepts a dangling config symlink when its target can be created", 
   );
 });
 
+test("doctor rejects a dangling config symlink without a writable target directory", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      symlinkSync("missing/target.json", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
+
+test("doctor rejects a chained config symlink without a writable final target directory", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const firstTarget = join(directory, "first-target.json");
+      symlinkSync("first-target.json", configPath);
+      symlinkSync("missing/target.json", firstTarget);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: false,
+        detail: configPath,
+      });
+      expect(() => writeFileSync(configPath, "{}")).toThrow();
+    },
+  );
+});
+
 async function waitForFile(path: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (existsSync(path)) return;

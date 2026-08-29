@@ -28,6 +28,14 @@ function runCodex(args: string[]): { ok: boolean; output: string } {
 }
 
 function configPathIsWritable(path: string): boolean {
+  try {
+    if (!statSync(path).isFile()) return false;
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+  }
+
   let directory = dirname(path);
   while (true) {
     try {

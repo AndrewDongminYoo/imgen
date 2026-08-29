@@ -7,6 +7,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -151,6 +152,52 @@ test("doctor reports every failed check when Codex is unavailable", async () => 
   } finally {
     process.env.PATH = originalPath;
   }
+});
+
+test("doctor rejects an existing config file without write access", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "config.json");
+      writeFileSync(configPath, "{}");
+      chmodSync(configPath, 0o400);
+      try {
+        const { runDoctor } = await import("./doctor.ts");
+        const report = runDoctor(configPath);
+
+        expect(report.ok).toBe(false);
+        expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+          name: "Config path",
+          ok: false,
+          detail: configPath,
+        });
+      } finally {
+        chmodSync(configPath, 0o600);
+      }
+    },
+  );
+});
+
+test("doctor accepts a dangling config symlink when its target can be created", async () => {
+  await withFakeCodex(
+    'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "imgen-doctor-config-"));
+      const configPath = join(directory, "config.json");
+      const targetPath = join(directory, "target.json");
+      symlinkSync("target.json", configPath);
+      const { runDoctor } = await import("./doctor.ts");
+      const report = runDoctor(configPath);
+
+      expect(report.checks.find((check) => check.name === "Config path")).toEqual({
+        name: "Config path",
+        ok: true,
+        detail: configPath,
+      });
+      writeFileSync(configPath, "{}");
+      expect(readFileSync(targetPath, "utf8")).toBe("{}");
+    },
+  );
 });
 
 async function waitForFile(path: string): Promise<void> {

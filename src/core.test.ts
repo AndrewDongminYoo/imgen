@@ -360,6 +360,25 @@ test("generate removes its temporary workspace when Codex exits without an image
   });
 });
 
+test("generate keeps the prompt before variadic reference image arguments", async () => {
+  const outputRoot = fakeLibrary();
+  const reference = join(outputRoot, "reference.png");
+  writeFileSync(reference, "reference");
+  await withFakeCodex(
+    'prompt_seen=false\nfor arg do\n  if [ "$arg" = "-i" ]; then break; fi\n  case "$arg" in *"Do not do anything else.") prompt_seen=true ;; esac\ndone\n$prompt_seen || { printf "No prompt provided via stdin.\\n" >&2; exit 1; }\nprintf "image" > out.png',
+    async () => {
+      const { generate } = await import("./generate.ts");
+      try {
+        const [shot] = await generate("a red fox", { references: [reference], outputDir: outputRoot }).done;
+
+        expect(readFileSync(shot!.path, "utf8")).toBe("image");
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
 test("generate persists each concurrent requested output", async () => {
   const outputRoot = mkdtempSync(join(tmpdir(), "imgen-output-"));
   await withFakeCodex(

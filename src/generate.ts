@@ -67,8 +67,8 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
       "--skip-git-repo-check",
       "-c",
       'sandbox_mode="workspace-write"',
-      ...references.flatMap((path) => ["-i", path]),
       buildPrompt(description, references),
+      ...references.flatMap((path) => ["-i", path]),
     ],
     { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );

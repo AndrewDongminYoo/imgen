@@ -7,7 +7,7 @@
     "dev": "bun run --watch src/index.tsx",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "build": "bun build --compile --outfile dist/imgen src/index.tsx",
+    "build": "bun build --compile --outfile dist/imgen src/index.tsx && codesign --force --sign - dist/imgen && codesign --verify --strict dist/imgen",
     "dist": "bun run build && cd dist && tar -czf imgen-darwin-arm64.tar.gz imgen && shasum -a 256 imgen-darwin-arm64.tar.gz",
     "probe:paste": "bun run dev/paste-probe.tsx",
     "probe:protocol": "bun run dev/protocol-probe.tsx",

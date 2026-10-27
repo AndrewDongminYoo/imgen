@@ -114,7 +114,9 @@ export function generate(description: string, options: GenerateOptions = {}): Ru
         if (existsSync(output)) return resolve([persistOutput(output, options.outputDir)]);
 
         const tail = stderr.trim().split("\n").slice(-3).join("\n");
-        reject(new Error(`codex exited ${code} without producing an image${tail ? `\n${tail}` : ""}`));
+        reject(
+          new Error(`codex exited ${code} without producing an image${tail ? `\n${tail}` : ""}`),
+        );
       } catch (error) {
         reject(error);
       } finally {

@@ -88,17 +88,15 @@ export function enhance(draft: string, style: string | null): EnhanceRun {
   };
 
   const done = new Promise<string>((resolve, reject) => {
-    child.on("error", (error) =>
-      {
-        clearTimers();
-        cleanup();
-        reject(
-          (error as { code?: string }).code === "ENOENT"
-            ? new Error("codex is not installed")
-            : error,
-        );
-      },
-    );
+    child.on("error", (error) => {
+      clearTimers();
+      cleanup();
+      reject(
+        (error as { code?: string }).code === "ENOENT"
+          ? new Error("codex is not installed")
+          : error,
+      );
+    });
     child.on("close", () => {
       clearTimers();
       try {

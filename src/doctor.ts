@@ -20,10 +20,14 @@ function runCodex(args: string[]): { ok: boolean; output: string } {
   if (result.error) {
     return {
       ok: false,
-      output: (result.error as NodeJS.ErrnoException).code === "ENOENT" ? "not installed" : result.error.message,
+      output:
+        (result.error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "not installed"
+          : result.error.message,
     };
   }
-  if (result.status !== 0) return { ok: false, output: result.stderr.trim() || `exited ${result.status ?? "unknown"}` };
+  if (result.status !== 0)
+    return { ok: false, output: result.stderr.trim() || `exited ${result.status ?? "unknown"}` };
   return { ok: true, output: result.stdout.trim() };
 }
 
@@ -55,7 +59,11 @@ function configPathIsWritable(path: string): boolean {
   const symlinkTarget = danglingSymlinkTarget(path);
   if (symlinkTarget === undefined) return false;
   if (symlinkTarget !== null) {
-    if (symlinkTarget.endsWith("/") || (process.platform === "win32" && symlinkTarget.endsWith("\\"))) return false;
+    if (
+      symlinkTarget.endsWith("/") ||
+      (process.platform === "win32" && symlinkTarget.endsWith("\\"))
+    )
+      return false;
     try {
       const targetDirectory = dirname(symlinkTarget);
       if (!statSync(targetDirectory).isDirectory()) return false;
@@ -84,14 +92,20 @@ function configPathIsWritable(path: string): boolean {
 export function runDoctor(configPath = CONFIG_PATH): DoctorReport {
   const version = runCodex(["--version"]);
   const features = version.ok ? runCodex(["features", "list"]) : null;
-  const imageGenerationEnabled = Boolean(features?.ok && /^image_generation\s+stable\s+true\s*$/m.test(features.output));
+  const imageGenerationEnabled = Boolean(
+    features?.ok && /^image_generation\s+stable\s+true\s*$/m.test(features.output),
+  );
   const configPathWritable = configPathIsWritable(configPath);
   const checks: DoctorCheck[] = [
     { name: "Codex CLI", ok: version.ok, detail: version.output || "installed" },
     {
       name: "image_generation",
       ok: imageGenerationEnabled,
-      detail: imageGenerationEnabled ? "stable" : features?.ok ? "disabled" : features?.output ?? "not checked",
+      detail: imageGenerationEnabled
+        ? "stable"
+        : features?.ok
+          ? "disabled"
+          : (features?.output ?? "not checked"),
     },
     { name: "Config path", ok: configPathWritable, detail: configPath },
   ];

@@ -23,7 +23,10 @@ export interface Shot {
 }
 
 /** Every generated image, newest first. */
-export function listShots(root: string | string[] | undefined = undefined, prompts: PromptIndex = loadPrompts()): Shot[] {
+export function listShots(
+  root: string | string[] | undefined = undefined,
+  prompts: PromptIndex = loadPrompts(),
+): Shot[] {
   const shots: Shot[] = [];
   const roots = root === undefined ? [IMGEN_LIBRARY, LIBRARY] : Array.isArray(root) ? root : [root];
 
@@ -51,7 +54,9 @@ export function listShots(root: string | string[] | undefined = undefined, promp
         if (!stat) continue;
         const provenance = prompts[path];
         const references = provenance?.references;
-        const hasOnlyStringReferences = Array.isArray(references) && references.every((reference) => typeof reference === "string");
+        const hasOnlyStringReferences =
+          Array.isArray(references) &&
+          references.every((reference) => typeof reference === "string");
         shots.push({
           path,
           session,

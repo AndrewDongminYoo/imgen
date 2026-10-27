@@ -38,7 +38,18 @@ const OK = "#10B981";
 const WARN = "#F59E0B";
 
 /** Braille spinner; a Codex turn reports no percentage, so motion is the honest signal. */
-const SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+const SPINNER = [
+  "\u280B",
+  "\u2819",
+  "\u2839",
+  "\u2838",
+  "\u283C",
+  "\u2834",
+  "\u2826",
+  "\u2827",
+  "\u2807",
+  "\u280F",
+];
 const TICK_MS = 90;
 
 /** alt+return arrives as a bare `return` whose sequence is prefixed with this. */
@@ -138,8 +149,7 @@ function App() {
    */
   const { height } = useTerminalDimensions();
   const showFilter = filtering || filter !== "";
-  const chromeRows =
-    12 + (typing ? 4 : 0) + (references.length > 0 ? 7 : 0) + (showFilter ? 1 : 0);
+  const chromeRows = 12 + (typing ? 4 : 0) + (references.length > 0 ? 7 : 0) + (showFilter ? 1 : 0);
   const listRows = Math.max(3, height - chromeRows);
   const windowStart = Math.max(
     0,
@@ -160,55 +170,68 @@ function App() {
    * A second run must not start over the first: overwriting `run.current` orphans the child,
    * which keeps running and billing while `esc` reaches only the newer one.
    */
-  const start = React.useCallback((description: string, attachedReferences: string[] = references): boolean => {
-    if (!description.trim()) return false;
-    if (run.current) {
-      setStatus({
-        kind: "note",
-        text: "a generation is already running — esc cancels it",
-        tone: "error",
-      });
-      return false;
-    }
-    setLastPrompt(description);
-    setStatus({ kind: "idle" }); // drop whatever the last run said; this one has its own answer
-    setRunningSince(Date.now());
-    setTicks(0);
-    setActivity("");
-
-    const current = generate(description, { references: attachedReferences, onActivity: setActivity });
-    run.current = current;
-    current.done
-      .then((produced) => {
-        // Recorded before the library is re-read, so the join picks the new labels up at once.
-        recordPrompt(produced.map((shot) => shot.path), {
-          prompt: description,
-          references: attachedReferences,
-        });
-        setShots(listShots());
-        setCursor(0);
-        renderer.requestRender();
+  const start = React.useCallback(
+    (description: string, attachedReferences: string[] = references): boolean => {
+      if (!description.trim()) return false;
+      if (run.current) {
         setStatus({
           kind: "note",
-          text: `${produced.length} image${produced.length === 1 ? "" : "s"} generated`,
-          tone: "ok",
+          text: "a generation is already running — esc cancels it",
+          tone: "error",
         });
-      })
-      .catch((error: Error) => {
-        // A cancelled run has already had its say, and a superseded one is not the news.
-        if (run.current !== current) return;
-        setStatus({ kind: "note", text: error.message.split("\n")[0] ?? "failed", tone: "error" });
-      })
-      .finally(() => {
-        // Only if this run still owns the slot: a cancelled run's close event arrives late, and
-        // clearing unconditionally would drop the handle of whatever was started after it and
-        // stop the successor's progress indicator halfway through.
-        if (run.current !== current) return;
-        run.current = null;
-        setRunningSince(null);
+        return false;
+      }
+      setLastPrompt(description);
+      setStatus({ kind: "idle" }); // drop whatever the last run said; this one has its own answer
+      setRunningSince(Date.now());
+      setTicks(0);
+      setActivity("");
+
+      const current = generate(description, {
+        references: attachedReferences,
+        onActivity: setActivity,
       });
-    return true;
-  }, [renderer, references]);
+      run.current = current;
+      current.done
+        .then((produced) => {
+          // Recorded before the library is re-read, so the join picks the new labels up at once.
+          recordPrompt(
+            produced.map((shot) => shot.path),
+            {
+              prompt: description,
+              references: attachedReferences,
+            },
+          );
+          setShots(listShots());
+          setCursor(0);
+          renderer.requestRender();
+          setStatus({
+            kind: "note",
+            text: `${produced.length} image${produced.length === 1 ? "" : "s"} generated`,
+            tone: "ok",
+          });
+        })
+        .catch((error: Error) => {
+          // A cancelled run has already had its say, and a superseded one is not the news.
+          if (run.current !== current) return;
+          setStatus({
+            kind: "note",
+            text: error.message.split("\n")[0] ?? "failed",
+            tone: "error",
+          });
+        })
+        .finally(() => {
+          // Only if this run still owns the slot: a cancelled run's close event arrives late, and
+          // clearing unconditionally would drop the handle of whatever was started after it and
+          // stop the successor's progress indicator halfway through.
+          if (run.current !== current) return;
+          run.current = null;
+          setRunningSince(null);
+        });
+      return true;
+    },
+    [renderer, references],
+  );
 
   const addReference = React.useCallback((path: string) => {
     setReferences((prev) => [...prev, path]);
@@ -279,7 +302,11 @@ function App() {
         current.done
           .then((text) => {
             editor.current?.editBuffer.setText(text);
-            setStatus({ kind: "note", text: "draft filled in \u2014 read it, edit it, then enter to generate", tone: "ok" });
+            setStatus({
+              kind: "note",
+              text: "draft filled in \u2014 read it, edit it, then enter to generate",
+              tone: "ok",
+            });
           })
           .catch((error: Error) => {
             if (error.message !== "cancelled") {
@@ -583,8 +610,8 @@ function App() {
         <text fg={MUTED}>
           {/* No ⌘V here: it is a paste gesture, not a key this app binds, and the capital reads
               as another uppercase binding. README documents it; v does the same thing. */}
-          i prompt · enter read prompt · / filter · j/k move · f fullscreen · v attach ref ·
-          x drop refs · c copy · p copy path · s save · o open · r reroll · q quit
+          i prompt · enter read prompt · / filter · j/k move · f fullscreen · v attach ref · x drop
+          refs · c copy · p copy path · s save · o open · r reroll · q quit
         </text>
       </box>
     </box>

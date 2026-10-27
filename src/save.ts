@@ -8,7 +8,10 @@ export function saveImage(source: string, destinationDir: string): string {
   const stem = filename.slice(0, filename.length - extension.length);
 
   for (let suffix = 0; ; suffix += 1) {
-    const destination = join(destinationDir, suffix === 0 ? filename : `${stem}-${suffix}${extension}`);
+    const destination = join(
+      destinationDir,
+      suffix === 0 ? filename : `${stem}-${suffix}${extension}`,
+    );
     try {
       copyFileSync(source, destination, constants.COPYFILE_EXCL);
       return destination;

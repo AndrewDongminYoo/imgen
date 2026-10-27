@@ -61,7 +61,10 @@ test("listShots combines imgen and Codex libraries", () => {
   utimesSync(codexShot, new Date(1_600_000_000_000), new Date(1_600_000_000_000));
   utimesSync(imgenShot, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
 
-  expect(listShots([codexRoot, imgenRoot]).map((shot) => shot.path)).toEqual([imgenShot, codexShot]);
+  expect(listShots([codexRoot, imgenRoot]).map((shot) => shot.path)).toEqual([
+    imgenShot,
+    codexShot,
+  ]);
 });
 
 function fakeIndexPath(): string {
@@ -72,10 +75,7 @@ function fakeCodex(body: string): { bin: string; cwdLog: string } {
   const bin = mkdtempSync(join(tmpdir(), "imgen-codex-bin-"));
   const cwdLog = join(bin, "cwd.log");
   const executable = join(bin, "codex");
-  writeFileSync(
-    executable,
-    `#!/bin/sh\nprintf '%s' "$PWD" > "$IMGEN_TEST_CWD_LOG"\n${body}\n`,
-  );
+  writeFileSync(executable, `#!/bin/sh\nprintf '%s' "$PWD" > "$IMGEN_TEST_CWD_LOG"\n${body}\n`);
   chmodSync(executable, 0o755);
   return { bin, cwdLog };
 }
@@ -100,7 +100,11 @@ test("doctor reports the installed Codex, enabled image generation, and a usable
     'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable true\\n" ;; esac',
     async () => {
       const { runDoctor } = await import("./doctor.ts");
-      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+      const configPath = join(
+        mkdtempSync(join(tmpdir(), "imgen-doctor-config-")),
+        "imgen",
+        "config.json",
+      );
 
       expect(runDoctor(configPath)).toEqual({
         ok: true,
@@ -119,7 +123,11 @@ test("doctor reports a disabled image generation feature", async () => {
     'case "$1" in --version) printf "codex-cli test 1.0.0\\n" ;; features) printf "image_generation stable false\\n" ;; esac',
     async () => {
       const { runDoctor } = await import("./doctor.ts");
-      const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+      const configPath = join(
+        mkdtempSync(join(tmpdir(), "imgen-doctor-config-")),
+        "imgen",
+        "config.json",
+      );
 
       expect(runDoctor(configPath)).toEqual({
         ok: false,
@@ -139,7 +147,11 @@ test("doctor reports every failed check when Codex is unavailable", async () => 
   process.env.PATH = join(root, "missing-bin");
   try {
     const { runDoctor } = await import("./doctor.ts");
-    const configPath = join(mkdtempSync(join(tmpdir(), "imgen-doctor-config-")), "imgen", "config.json");
+    const configPath = join(
+      mkdtempSync(join(tmpdir(), "imgen-doctor-config-")),
+      "imgen",
+      "config.json",
+    );
 
     expect(runDoctor(configPath)).toEqual({
       ok: false,
@@ -354,7 +366,9 @@ test("generate removes its temporary workspace when Codex exits without an image
   await withFakeCodex("exit 0", async (cwdLog) => {
     const { generate } = await import("./generate.ts");
 
-    await expect(generate("a red fox").done).rejects.toThrow("codex exited 0 without producing an image");
+    await expect(generate("a red fox").done).rejects.toThrow(
+      "codex exited 0 without producing an image",
+    );
 
     expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
   });
@@ -369,7 +383,10 @@ test("generate keeps the prompt before variadic reference image arguments", asyn
     async () => {
       const { generate } = await import("./generate.ts");
       try {
-        const [shot] = await generate("a red fox", { references: [reference], outputDir: outputRoot }).done;
+        const [shot] = await generate("a red fox", {
+          references: [reference],
+          outputDir: outputRoot,
+        }).done;
 
         expect(readFileSync(shot!.path, "utf8")).toBe("image");
       } finally {
@@ -391,10 +408,12 @@ test("generate persists each concurrent requested output", async () => {
           generate("a blue heron", { outputDir: outputRoot }).done,
         ]);
 
-        expect(produced.flat().map((shot) => readFileSync(shot.path, "utf8")).sort()).toEqual([
-          "fox",
-          "heron",
-        ]);
+        expect(
+          produced
+            .flat()
+            .map((shot) => readFileSync(shot.path, "utf8"))
+            .sort(),
+        ).toEqual(["fox", "heron"]);
       } finally {
         rmSync(outputRoot, { recursive: true, force: true });
       }
@@ -487,7 +506,9 @@ test("enhance removes its temporary workspace when Codex produces no prompt", as
   await withFakeCodex("exit 0", async (cwdLog) => {
     const { enhance } = await import("./enhance.ts");
 
-    await expect(enhance("a red fox", null).done).rejects.toThrow("codex produced no rewritten prompt");
+    await expect(enhance("a red fox", null).done).rejects.toThrow(
+      "codex produced no rewritten prompt",
+    );
 
     expect(existsSync(readFileSync(cwdLog, "utf8"))).toBe(false);
   });
@@ -573,10 +594,14 @@ test("recordPrompt survives a round trip and keeps what earlier runs wrote", () 
 test("recordPrompt keeps the reference images that informed a generation", () => {
   const index = fakeIndexPath();
 
-  recordPrompt(["/lib/a.png"], {
-    prompt: "a red fox",
-    references: ["/attachments/fox.png"],
-  }, index);
+  recordPrompt(
+    ["/lib/a.png"],
+    {
+      prompt: "a red fox",
+      references: ["/attachments/fox.png"],
+    },
+    index,
+  );
 
   const stored = loadPrompts(index);
   expect(stored["/lib/a.png"]?.prompt).toBe("a red fox");
@@ -603,10 +628,7 @@ test("recordPrompt creates private prompt storage", () => {
 
 test("loadPrompts keeps legacy records that have no references", () => {
   const index = fakeIndexPath();
-  writeFileSync(
-    index,
-    JSON.stringify({ "/lib/a.png": { prompt: "a red fox", at: 1 } }),
-  );
+  writeFileSync(index, JSON.stringify({ "/lib/a.png": { prompt: "a red fox", at: 1 } }));
 
   expect(loadPrompts(index)).toEqual({ "/lib/a.png": { prompt: "a red fox", at: 1 } });
 });
@@ -743,17 +765,20 @@ test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST || process.platform !== "darwin")(
 );
 
 // Same opt-in as above: writing text to the clipboard clobbers whatever the user had copied.
-test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST)("a path goes onto the clipboard as text", async () => {
-  const { createHostClipboard } = await import("@opentui/core");
-  const { copyTextToClipboard } = await import("./clipboard.ts");
+test.skipIf(!process.env.IMGEN_CLIPBOARD_TEST)(
+  "a path goes onto the clipboard as text",
+  async () => {
+    const { createHostClipboard } = await import("@opentui/core");
+    const { copyTextToClipboard } = await import("./clipboard.ts");
 
-  const path = "/tmp/imgen-clipboard-check.png";
-  await copyTextToClipboard(path);
+    const path = "/tmp/imgen-clipboard-check.png";
+    await copyTextToClipboard(path);
 
-  const result = await createHostClipboard().read({ preferredTypes: ["text/plain"] });
-  if (result.status !== "read") throw new Error(`clipboard read ${result.status}`);
-  expect(new TextDecoder().decode(result.representation.bytes)).toBe(path);
-});
+    const result = await createHostClipboard().read({ preferredTypes: ["text/plain"] });
+    if (result.status !== "read") throw new Error(`clipboard read ${result.status}`);
+    expect(new TextDecoder().decode(result.representation.bytes)).toBe(path);
+  },
+);
 
 test("enhanceInstruction keeps the draft, forbids lettering, and honours a standing style", () => {
   const plain = enhanceInstruction("a fox on a bicycle", null);

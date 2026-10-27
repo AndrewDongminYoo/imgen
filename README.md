@@ -41,25 +41,25 @@ imgen doctor
 imgen doctor --json
 ```
 
-| Key        | Action                                                     |
-| ---------- | ---------------------------------------------------------- |
-| `i`        | focus the prompt; `enter` generates                        |
-| `/`        | filter the gallery by prompt; `enter` applies, `esc` clears |
-| `enter`    | read the prompt in full; `j`/`k` scroll it, `c` copies it  |
-| `tab`      | let Codex flesh out the draft — composition, light, style  |
-| `shift+enter` or `option+enter` | new line in the prompt                 |
-| `j`/`k`    | move through the gallery                                   |
-| `f`        | hide the gallery and fill the screen                       |
-| `⌘V`       | attach the image on the clipboard as a reference           |
-| `v`        | the same thing, for terminals that swallow `⌘V`            |
-| `x`        | remove every attached reference                            |
-| `c`        | copy the selected image to the clipboard                   |
-| `p`        | copy its path instead, as text                             |
-| `s`        | save the selected image into the current directory         |
-| `o`        | open it in the system viewer                               |
-| `r`        | roll the selected image's prompt again, or the last one    |
-| `esc`      | cancel a running generation                                |
-| `q`        | quit                                                       |
+| Key                             | Action                                                      |
+| ------------------------------- | ----------------------------------------------------------- |
+| `i`                             | focus the prompt; `enter` generates                         |
+| `/`                             | filter the gallery by prompt; `enter` applies, `esc` clears |
+| `enter`                         | read the prompt in full; `j`/`k` scroll it, `c` copies it   |
+| `tab`                           | let Codex flesh out the draft — composition, light, style   |
+| `shift+enter` or `option+enter` | new line in the prompt                                      |
+| `j`/`k`                         | move through the gallery                                    |
+| `f`                             | hide the gallery and fill the screen                        |
+| `⌘V`                            | attach the image on the clipboard as a reference            |
+| `v`                             | the same thing, for terminals that swallow `⌘V`             |
+| `x`                             | remove every attached reference                             |
+| `c`                             | copy the selected image to the clipboard                    |
+| `p`                             | copy its path instead, as text                              |
+| `s`                             | save the selected image into the current directory          |
+| `o`                             | open it in the system viewer                                |
+| `r`                             | roll the selected image's prompt again, or the last one     |
+| `esc`                           | cancel a running generation                                 |
+| `q`                             | quit                                                        |
 
 ## Fleshing out a prompt
 
@@ -146,12 +146,12 @@ going with the prompt is visible rather than counted.
 `⌘V` never arrives as a keypress — the terminal turns it into a paste — and what it puts in that
 paste varies, so three routes are handled.
 
-| What the terminal sends | Route |
-| ----------------------- | ------ |
-| the path of an image file, as text | copied in |
-| anything else | the pasteboard is read directly, by mime type |
+| What the terminal sends            | Route                                         |
+| ---------------------------------- | --------------------------------------------- |
+| the path of an image file, as text | copied in                                     |
+| anything else                      | the pasteboard is read directly, by mime type |
 
-Pasted *text* stops at the prompt editor, so writing a prompt while an image happens to be
+Pasted _text_ stops at the prompt editor, so writing a prompt while an image happens to be
 copied never attaches it by accident.
 
 The pasteboard read is OpenTUI's native clipboard, asked for `image/png`, `image/tiff` or
@@ -166,7 +166,7 @@ else again with `⌘V`.
 Pasted images are written to `~/.codex/attachments/<session>/image-N.png`, the same place and the
 same naming Codex uses for images pasted into one of its own sessions.
 
-Writing an image *to* the pasteboard (`c`) still goes through `osascript` and the `«class PNGf»`
+Writing an image _to_ the pasteboard (`c`) still goes through `osascript` and the `«class PNGf»`
 type, which the native clipboard does not cover. Either way there is no `pngpaste` or other
 Homebrew helper to install.
 
@@ -181,10 +181,10 @@ honest signals.
 The preview quality is a property of your terminal, not of this tool.
 `imgen` prints which protocol it resolved in the header.
 
-| Protocol | Meaning                                          | Seen in                    |
-| -------- | ------------------------------------------------ | -------------------------- |
-| `kitty`  | true pixels                                      | Warp                       |
-| `sixel`  | true pixels                                      | —                          |
+| Protocol | Meaning                                          | Seen in                     |
+| -------- | ------------------------------------------------ | --------------------------- |
+| `kitty`  | true pixels                                      | Warp                        |
+| `sixel`  | true pixels                                      | —                           |
 | `blocks` | half-block approximation, the universal fallback | VS Code integrated terminal |
 
 **A terminal without a pixel protocol is a supported terminal, not a degraded one.**

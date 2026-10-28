@@ -4,3 +4,4 @@ imgen
 osascript
 ptyrun
 sixel
+taplo

@@ -13,7 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | typecheck       | `bun run typecheck`              |
 | compiled binary | `bun run build` → `dist/imgen`   |
 
-`bun test` and `bun run typecheck` are the whole gate — there is no trunk config and no lint script, only a `cspell.json` for spelling.
+Run `bun install --frozen-lockfile`, `bun test`, and `bun run typecheck` for the CI gate.
+Run `trunk check --all --no-fix --jobs=2` for the full local quality scan configured in `.trunk/trunk.yaml`.
+There is no package-level lint script.
 
 The two clipboard tests are skipped by default.
 Opt in with `IMGEN_CLIPBOARD_TEST=1 bun test` — the run overwrites whatever the operator had copied, so ask first.
@@ -32,10 +34,11 @@ Two spawn sites, same shape:
 Both return a handle (`{ done, cancel }`) rather than a bare promise: a turn takes minutes and `esc` has to kill it mid-flight.
 Both spawn with `stdio: ["ignore", …]` — piped stdin is appended to the prompt and the run hangs waiting for more.
 
-**A run's output is identified by diffing the library, never by reading the newest file.**
-`library.ts` snapshots `~/.codex/generated_images/` before the spawn and diffs afterwards (`snapshot` / `newSince`).
-One run can emit several images into one session directory, and a run that produced nothing must report the failure rather than hand back an unrelated earlier picture.
-`src/core.test.ts` pins both cases.
+**A run's output is the requested `out.png` in its temporary work directory.**
+`generate.ts` asks Codex to save that file, then calls `library.ts`'s `persistOutput` to copy it into imgen-owned storage under `~/.config/imgen/images/` (or `$XDG_CONFIG_HOME/imgen/images/`).
+`listShots` combines this store with `~/.codex/generated_images/` for the gallery.
+A missing `out.png` reports failure instead of selecting another session's image.
+`src/core.test.ts` covers missing output and concurrent runs with separate requested outputs.
 
 `index.tsx` holds the whole UI and all key handling in one `useKeyboard`.
 The `typing` branch returns early — a focused editor owns every key that branch does not claim.
@@ -45,9 +48,10 @@ The textarea is uncontrolled: its text is read off `editor.current.editBuffer` a
 
 `clipboard.ts` writes attachments to `~/.codex/attachments/<session>/image-N.png`, the same layout Codex uses for images pasted into its own sessions.
 
-`prompts.ts` owns the only state imgen keeps of its own: which prompt produced which image, in `~/.config/imgen/prompts.json`, joined onto `Shot.prompt` by `listShots`.
+`prompts.ts` records which prompt produced which image, in `~/.config/imgen/prompts.json`, joined onto `Shot.prompt` by `listShots`.
 It records forward and never excavates — README §"What made each picture" holds the measurements behind that choice.
-Nothing else in the app persists anything, so a missing or corrupt index degrades to the pre-existing behaviour rather than failing.
+The app also persists generated images and the standing style in `config.json`.
+A missing or corrupt prompt index leaves images available without their recorded prompts.
 
 ## Constraints that the code alone does not explain
 

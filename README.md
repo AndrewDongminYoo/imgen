@@ -212,9 +212,15 @@ If `out.png` is absent, imgen reports failure instead of attributing another Cod
 
 ```bash
 bun test
-bunx tsc --noEmit
+bun run typecheck
+trunk check --all --no-fix --jobs=2
 python3 dev/measure.py bun run src/index.tsx   # compare preview size between layouts
 ```
+
+CI uses Bun `1.4.4` and runs `bun install --frozen-lockfile`, `bun test`, and `bun run typecheck`.
+The full local quality scan uses `.trunk/trunk.yaml`.
+The default tests use fake Codex executables and skip the two clipboard writes unless `IMGEN_CLIPBOARD_TEST` is set.
+These checks do not verify live generation, terminal image protocols, or clipboard behavior.
 
 `dev/ptyrun.py` runs the app under a real pty and prints what it drew, which is the only way to see
 a TUI from a script. `dev/quitcheck.py` measures how long a quit key takes to actually exit.

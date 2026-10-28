@@ -15,20 +15,20 @@ lint:
     - grype
     - taplo
   enabled:
-    - actionlint@1.7.8
+    - actionlint@1.7.12
     - black@26.10.1
     - checkov@3.3.30
     - git-diff-check
     - isort@9.0.2
     - markdownlint@0.50.0
-    - osv-scanner@2.2.4
-    - oxipng@9.1.5
+    - osv-scanner@2.7.0
+    - oxipng@10.2.1
     - pinact@4.1.1!:
         commands: [lint, upgrade]
     - prettier@3.9.10
     - ruff@0.17.3
-    - trivy@0.70.0
-    - trufflehog@3.90.13
+    - trivy@0.76.1
+    - trufflehog@3.99.7
     - yamllint@1.38.0
 actions:
   disabled:

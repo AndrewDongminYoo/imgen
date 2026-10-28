@@ -50,7 +50,7 @@ The textarea is uncontrolled: its text is read off `editor.current.editBuffer` a
 
 `prompts.ts` records which prompt produced which image, in `~/.config/imgen/prompts.json`, joined onto `Shot.prompt` by `listShots`.
 It records forward and never excavates — README §"What made each picture" holds the measurements behind that choice.
-The app also persists generated images and the standing style in `config.json`.
+The app persists generated images under imgen-owned image storage and the standing style in `config.json`.
 A missing or corrupt prompt index leaves images available without their recorded prompts.
 
 ## Constraints that the code alone does not explain

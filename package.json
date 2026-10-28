@@ -14,15 +14,15 @@
     "probe:key": "bun run dev/key-probe.tsx"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@opentui/core": "^0.6.8",
-    "@opentui/react": "^0.6.8",
+    "@opentui/core": "^0.7.0",
+    "@opentui/react": "^0.7.0",
     "react": "^19.3.1"
   },
   "version": "0.7.1",

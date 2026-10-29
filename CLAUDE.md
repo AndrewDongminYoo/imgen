@@ -66,3 +66,11 @@ Read the `opentui-verification-limits` memory before quoting it for anything.
 
 Use the harness for layout, flow, and exit behaviour.
 For image protocol, paste shape, or clipboard, run a probe in the actual terminal (`bun run probe:protocol`, `bun run probe:paste`, `bun run probe:key`) and state which of the two produced the claim.
+
+## Offline Secret Reader
+
+Run `python3 -B .trunk/configs/tests/test_trufflehog_to_sarif.py` for the separate standard-library tooling regressions.
+CI runs this exact file independently of the existing application checks.
+The configured filesystem scanner uses `--no-verification --no-update`; its local SARIF reader retains decoded findings without exposing secret values.
+Run `trunk check --all --no-fix --jobs=2` for the full configured quality scan.
+Other scanners may use advisory or tool metadata services; the filesystem flags do not make the entire Trunk run network-free.

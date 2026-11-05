@@ -18,7 +18,7 @@ Run `trunk check --all --no-fix --jobs=2` for the full local quality scan config
 There is no package-level lint script.
 
 The two clipboard tests are skipped by default.
-Opt in with `IMGEN_CLIPBOARD_TEST=1 bun test` — the run overwrites whatever the operator had copied, so ask first.
+Opt in with `IMGEN_CLIPBOARD_TEST=1 bun test` — the run overwrites whatever the user had copied, so ask first.
 Only the image round-trip is additionally macOS-gated; the text write goes through OpenTUI and is not.
 
 ## Architecture
@@ -55,7 +55,7 @@ A missing or corrupt prompt index leaves images available without their recorded
 
 ## Constraints that the code alone does not explain
 
-- **`q` must call `renderer.destroy()` before `process.exit`.** Skipping OpenTUI's teardown leaves mouse reporting (1000/1002/1003/1006), the alternate screen, and the hidden cursor set in the operator's shell.
+- **`q` must call `renderer.destroy()` before `process.exit`.** Skipping OpenTUI's teardown leaves mouse reporting (1000/1002/1003/1006), the alternate screen, and the hidden cursor set in the user's shell.
 - **The gallery renders a window sized from terminal height, not the whole list.** An overflowing list scrolls the terminal, which cuts the in-flight kitty escape sequence carrying the preview and dumps the remainder as visible base64 text. `python3 dev/scrollcheck.py bun run src/index.tsx` asserts both that failure and the cursor walking off the drawn rows.
 - **New line binds every modified return, and `ctrl+J` deliberately none.** Which of them reaches an application varies by terminal; README §"New lines" owns the measurements. `IMGEN_KEY_LOG=/path/to/log` records what the real terminal delivers alongside what the editor did with it.
 
